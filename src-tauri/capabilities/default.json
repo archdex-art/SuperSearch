@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicegui/nicegui/master/nicegui/json_schema/tauri-acl-schema.json",
+  "identifier": "default",
+  "description": "Default capabilities for the SuperSearch WebView",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:window:allow-close",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-focus",
+    "core:window:allow-set-size",
+    "global-shortcut:default"
+  ]
+}

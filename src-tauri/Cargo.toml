@@ -1,0 +1,23 @@
+[package]
+name = "supersearch-app"
+version = "0.1.0"
+edition = "2021"
+description = "SuperSearch — AI-Native Productivity Layer Desktop App"
+
+[dependencies]
+supersearch-runtime = { path = "../crates/supersearch-runtime" }
+tauri = { version = "2", features = ["macos-private-api"] }
+tauri-plugin-global-shortcut = "2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.40", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+parking_lot = "0.12"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[lib]
+name = "supersearch_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]

@@ -1,0 +1,31 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Application Data
+/data/
+/errors.txt
+
+# Node / Frontend (if added later)
+node_modules/
+dist/
+build/
+.env
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+*.tbd
+
+# IDE / Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.gemini/

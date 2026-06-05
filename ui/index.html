@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost https://fonts.googleapis.com https://fonts.gstatic.com">
+  <title>SuperSearch</title>
+
+  <!-- Design System -->
+  <link rel="stylesheet" href="styles/main.css">
+  <link rel="stylesheet" href="styles/animations.css">
+</head>
+<body>
+
+  <main class="palette-container" role="application" aria-label="SuperSearch Command Palette">
+
+    <!-- Title Bar (drag region) -->
+    <div class="title-bar">
+      <span class="title-bar__label">SuperSearch</span>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="search-bar" role="search">
+      <svg class="search-bar__icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="8.5" cy="8.5" r="5.5"/>
+        <line x1="13" y1="13" x2="18" y2="18"/>
+      </svg>
+      <input
+        id="search-input"
+        class="search-bar__input"
+        type="text"
+        placeholder="Search apps, files, or type a command…"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck="false"
+        aria-label="Search"
+      >
+      <span id="mode-badge" class="search-bar__badge" aria-hidden="true">⌥ Space</span>
+    </div>
+
+    <!-- Telemetry Strip -->
+    <div class="telemetry-strip" role="status" aria-label="Kernel Telemetry">
+      <div class="telemetry-item">
+        <span class="telemetry-item__dot telemetry-item__dot--green" aria-hidden="true"></span>
+        <span class="telemetry-item__label">Scheduler</span>
+        <span class="telemetry-item__value" id="telemetry-scheduler">0 ticks</span>
+      </div>
+      <div class="telemetry-item">
+        <span class="telemetry-item__dot telemetry-item__dot--blue" aria-hidden="true"></span>
+        <span class="telemetry-item__label">Capabilities</span>
+        <span class="telemetry-item__value" id="telemetry-capabilities">0 active</span>
+      </div>
+      <div class="telemetry-item">
+        <span class="telemetry-item__dot telemetry-item__dot--violet" aria-hidden="true"></span>
+        <span class="telemetry-item__label">Uptime</span>
+        <span class="telemetry-item__value" id="telemetry-uptime">0s</span>
+      </div>
+      <div class="telemetry-item">
+        <span class="telemetry-item__dot telemetry-item__dot--cyan" aria-hidden="true"></span>
+        <span class="telemetry-item__label">Boot</span>
+        <span class="telemetry-item__value" id="telemetry-boot">—</span>
+      </div>
+      <div class="status-indicator">
+        <span class="status-indicator__dot" aria-hidden="true"></span>
+        <span class="status-indicator__label" id="status-label">Kernel Active</span>
+      </div>
+    </div>
+
+    <!-- Content Area (Results + Preview) -->
+    <div id="content-area" class="content-area">
+      <!-- Results Panel -->
+      <div id="results-panel" class="results-panel" role="listbox" aria-label="Search Results">
+        <!-- Rendered by app.js -->
+      </div>
+
+      <!-- Preview Panel -->
+      <div id="preview-panel" class="preview-panel" aria-label="Result Preview">
+        <!-- Rendered by preview.js -->
+      </div>
+    </div>
+
+    <!-- Agent Panel (shown during agent interactions) -->
+    <div id="agent-panel" class="agent-panel" aria-label="Agent Console">
+      <!-- Rendered by agent.js -->
+    </div>
+
+    <!-- Keyboard Shortcut Bar -->
+    <nav class="shortcut-bar" aria-label="Keyboard Shortcuts">
+      <div class="shortcut">
+        <span class="shortcut__key">↑↓</span>
+        <span class="shortcut__label">Navigate</span>
+      </div>
+      <div class="shortcut">
+        <span class="shortcut__key">↵</span>
+        <span class="shortcut__label">Execute</span>
+      </div>
+      <div class="shortcut">
+        <span class="shortcut__key">⌘↵</span>
+        <span class="shortcut__label">Reveal</span>
+      </div>
+      <div class="shortcut">
+        <span class="shortcut__key">Tab</span>
+        <span class="shortcut__label">Preview</span>
+      </div>
+      <div class="shortcut">
+        <span class="shortcut__key">Esc</span>
+        <span class="shortcut__label">Close</span>
+      </div>
+    </nav>
+
+  </main>
+
+  <!-- App Controller (ES Module) -->
+  <script type="module" src="scripts/app.js"></script>
+
+</body>
+</html>
