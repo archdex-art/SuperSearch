@@ -129,9 +129,18 @@ pub fn run() {
                 info!(shortcut = TOGGLE_SHORTCUT, "Global toggle shortcut registered");
             }
 
-            // Show the palette once on first launch so the app isn't invisible
-            // before the user discovers the hotkey.
+            // Make the palette overlay the *active* Space instead of living on
+            // its own desktop. Without CanJoinAllSpaces (set via this call),
+            // summoning from another app switches Spaces to wherever the window
+            // was created — the "opens in a separate desktop" bug.
             if let Some(window) = handle.get_webview_window("main") {
+                if let Err(e) = window.set_visible_on_all_workspaces(true) {
+                    error!(error = %e, "Failed to set visible-on-all-workspaces");
+                }
+                let _ = window.set_always_on_top(true);
+
+                // Show the palette once on first launch so the app isn't
+                // invisible before the user discovers the hotkey.
                 show_palette(&window);
             }
 
