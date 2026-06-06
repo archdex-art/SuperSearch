@@ -33,13 +33,23 @@ pub fn execute_action(
     state: tauri::State<'_, AppState>,
 ) -> Result<ExecuteActionResponse, String> {
     let action_id = &request.action_id;
+    // Bound the payload; a well-formed action id is short (a prefix + a path,
+    // app name, or command). Reject pathological input before doing any work.
+    const MAX_ACTION_ID_LEN: usize = 4096;
+    if action_id.is_empty() {
+        return Err("Empty action id".into());
+    }
+    if action_id.len() > MAX_ACTION_ID_LEN {
+        return Err(format!("Action id too long (max {} bytes)", MAX_ACTION_ID_LEN));
+    }
     info!(action_id, "Executing action");
 
     let response = if action_id.starts_with("app:") {
         // Launch application.
         let app_path = &action_id[4..];
-        execute_shell(
-            &format!("open \"{}\"", app_path),
+        execute_argv(
+            "open",
+            &["--", app_path],
             action_id,
             "Launch App",
             "Application",
@@ -47,21 +57,28 @@ pub fn execute_action(
     } else if action_id.starts_with("file:") {
         // Open file.
         let file_path = &action_id[5..];
-        execute_shell(
-            &format!("open \"{}\"", file_path),
+        execute_argv(
+            "open",
+            &["--", file_path],
             action_id,
             "Open File",
             "File",
         )?
     } else if action_id.starts_with("terminal:") {
-        // Open terminal and execute command.
+        // Open terminal and execute command. The command is passed as an
+        // AppleScript argv item, so it cannot break out of the script string.
         let cmd = &action_id[9..];
-        let script = format!(
-            r#"osascript -e 'tell application "Terminal"' -e 'do script "{}"' -e 'activate' -e 'end tell'"#,
-            cmd.replace('"', "\\\"")
-        );
-        execute_shell(
-            &script,
+        execute_argv(
+            "osascript",
+            &[
+                "-e", "on run argv",
+                "-e", "tell application \"Terminal\"",
+                "-e", "do script (item 1 of argv)",
+                "-e", "activate",
+                "-e", "end tell",
+                "-e", "end run",
+                "--", cmd,
+            ],
             action_id,
             "Terminal Command",
             "System",
@@ -71,13 +88,27 @@ pub fn execute_action(
         if parts.len() == 2 {
             let app_name = parts[0];
             let task = parts[1];
-            let script = format!(
-                r#"osascript -e 'set wasRunning to application "{app}" is running' -e 'tell application "{app}" to activate' -e 'if not wasRunning then' -e 'delay 2.5' -e 'else' -e 'delay 0.5' -e 'end if' -e 'tell application "System Events" to keystroke "{task}"' -e 'tell application "System Events" to key code 36'"#,
-                app = app_name.replace('"', "\\\""),
-                task = task.replace('"', "\\\"").replace('\\', "\\\\")
-            );
-            execute_shell(
-                &script,
+            // Both the app name and the keystroke text are passed as AppleScript
+            // argv items (item 1 / item 2), never interpolated into the script
+            // source — closing the shell/AppleScript injection hole.
+            execute_argv(
+                "osascript",
+                &[
+                    "-e", "on run argv",
+                    "-e", "set appName to item 1 of argv",
+                    "-e", "set taskText to item 2 of argv",
+                    "-e", "set wasRunning to application appName is running",
+                    "-e", "tell application appName to activate",
+                    "-e", "if not wasRunning then",
+                    "-e", "delay 2.5",
+                    "-e", "else",
+                    "-e", "delay 0.5",
+                    "-e", "end if",
+                    "-e", "tell application \"System Events\" to keystroke taskText",
+                    "-e", "tell application \"System Events\" to key code 36",
+                    "-e", "end run",
+                    "--", app_name, task,
+                ],
                 action_id,
                 &format!("Command in {}", app_name),
                 "System",
@@ -197,14 +228,39 @@ pub fn execute_action(
     Ok(response)
 }
 
-/// Helper: run a shell command and return an ExecuteActionResponse.
+/// Helper: spawn a program directly with an argument vector (no shell) and
+/// return an `ExecuteActionResponse`. Preferred for any path carrying
+/// user-derived data, since shell metacharacters are inert in argv form.
+fn execute_argv(
+    program: &str,
+    args: &[&str],
+    action_id: &str,
+    title: &str,
+    category: &str,
+) -> Result<ExecuteActionResponse, String> {
+    finalize(Command::new(program).args(args).output(), action_id, title, category)
+}
+
+/// Helper: run a trusted, constant shell command and return an
+/// `ExecuteActionResponse`. Only used for the fixed `sys:` commands — never
+/// with interpolated user input.
 fn execute_shell(
     cmd: &str,
     action_id: &str,
     title: &str,
     category: &str,
 ) -> Result<ExecuteActionResponse, String> {
-    match Command::new("sh").arg("-c").arg(cmd).output() {
+    finalize(Command::new("sh").arg("-c").arg(cmd).output(), action_id, title, category)
+}
+
+/// Normalize a completed command into an `ExecuteActionResponse`.
+fn finalize(
+    output: std::io::Result<std::process::Output>,
+    action_id: &str,
+    title: &str,
+    category: &str,
+) -> Result<ExecuteActionResponse, String> {
+    match output {
         Ok(output) => {
             let success = output.status.success();
             let mut stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();

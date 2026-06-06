@@ -57,7 +57,7 @@ pub fn run() {
             commands::agent::agent_query,
             commands::agent::agent_check,
         ])
-        .setup(|app| {
+        .setup(|_app| {
             info!("Tauri setup complete — WebView ready");
 
             #[cfg(target_os = "macos")]

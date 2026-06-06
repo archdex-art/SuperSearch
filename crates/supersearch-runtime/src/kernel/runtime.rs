@@ -24,6 +24,8 @@ use crate::scheduler::executor::{SchedulerExecutor, SchedulerConfig, NoopFastPat
 use crate::scheduler::supervisor::{Supervisor, SupervisorStrategy, ChildSpec, RestartPolicy};
 use crate::capability::registry::CapabilityRegistry;
 use crate::capability::gate::CapabilityGate;
+use crate::capability::namespace::Namespace;
+use crate::capability::token::Permission;
 use crate::journal::writer::{JournalWriter, JournalSender};
 use crate::reactive::graph::DependencyGraph;
 use crate::reactive::reconcile::ReconciliationEngine;
@@ -138,8 +140,34 @@ impl RuntimeKernel {
         info!("OS automation and process manager initialized");
 
         // 7. Agent controller.
-        let agent = Arc::new(AgentController::new());
-        info!("Agent controller initialized");
+        // Grant the agent a capability token scoped to the `agent` namespace,
+        // covering exactly the OS-automation permissions its task nodes use.
+        // The executor presents this token to the gate before every action;
+        // nothing runs without an explicit, revocable grant.
+        let agent_token = registry.grant(
+            Namespace::new("agent"),
+            vec![
+                Permission::ProcessSpawn,
+                Permission::ProcessSignal,
+                Permission::ProcessInspect,
+                Permission::WindowManipulate,
+                Permission::InputSimulate,
+                Permission::FileRead,
+                Permission::DirectoryList,
+                Permission::NetworkConnect,
+                Permission::ClipboardRead,
+                Permission::ClipboardWrite,
+            ],
+            "agent".into(),
+            None,
+            "SuperSearch agent OS automation".into(),
+        );
+        let agent = Arc::new(AgentController::new(
+            gate.clone(),
+            agent_token,
+            Some(journal_sender.clone()),
+        ));
+        info!("Agent controller initialized with capability token");
 
         info!("Runtime kernel boot complete — ready to run");
 

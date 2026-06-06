@@ -2,16 +2,14 @@
 //!
 //! Exposes the agent pipeline to the frontend via Tauri commands.
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::command;
 
 use crate::state::AppState;
 
-/// Agent query request from the frontend.
-#[derive(Debug, Deserialize)]
-pub struct AgentQueryRequest {
-    pub query: String,
-}
+/// Maximum accepted length of a natural-language query, in bytes. Bounds the
+/// work any single IPC call can trigger and rejects pathological input early.
+const MAX_QUERY_LEN: usize = 2048;
 
 /// Agent query response sent to the frontend.
 #[derive(Debug, Serialize)]
@@ -43,6 +41,7 @@ pub fn agent_query(
     query: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<AgentQueryResponse, String> {
+    let query = validate_query(query)?;
     let response = state.agent.process_query(&query);
 
     Ok(AgentQueryResponse {
@@ -68,5 +67,24 @@ pub fn agent_check(
     query: String,
     state: tauri::State<'_, AppState>,
 ) -> bool {
-    state.agent.is_agent_query(&query)
+    match validate_query(query) {
+        Ok(q) => state.agent.is_agent_query(&q),
+        Err(_) => false,
+    }
+}
+
+/// Validate and normalize an incoming query: reject empty/oversized input.
+fn validate_query(query: String) -> Result<String, String> {
+    let trimmed = query.trim();
+    if trimmed.is_empty() {
+        return Err("Query is empty".into());
+    }
+    if trimmed.len() > MAX_QUERY_LEN {
+        return Err(format!(
+            "Query too long ({} bytes; max {})",
+            trimmed.len(),
+            MAX_QUERY_LEN
+        ));
+    }
+    Ok(trimmed.to_string())
 }

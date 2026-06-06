@@ -313,6 +313,7 @@ mod tests {
     use super::*;
     use crate::scheduler::queue::MultiQueue;
     use crate::scheduler::supervisor::Supervisor;
+    use crate::scheduler::{SupervisorStrategy, PriorityClass};
 
     #[tokio::test]
     async fn scheduler_completes_single_task() {
