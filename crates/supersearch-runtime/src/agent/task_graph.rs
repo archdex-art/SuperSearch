@@ -209,6 +209,17 @@ impl TaskGraph {
         self.update_overall_status();
     }
 
+    /// Mark a node as skipped (a prerequisite failed, so it can never run).
+    /// Only affects nodes still `Pending`.
+    pub fn skip_node(&mut self, id: NodeId) {
+        if let Some(node) = self.nodes.get_mut(id) {
+            if node.status == TaskStatus::Pending {
+                node.status = TaskStatus::Skipped;
+            }
+        }
+        self.update_overall_status();
+    }
+
     /// Check if the entire graph is finished (all nodes completed or failed/skipped).
     pub fn is_finished(&self) -> bool {
         self.nodes.iter().all(|n| matches!(

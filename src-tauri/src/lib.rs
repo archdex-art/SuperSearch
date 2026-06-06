@@ -21,6 +21,20 @@ use state::AppState;
 /// Option key, so this is Option+Space — the Spotlight-style chord.
 const TOGGLE_SHORTCUT: &str = "Alt+Space";
 
+/// Absolute path for the runtime journal, under the user's data dir. Never a
+/// relative path: a packaged `.app` has a non-writable working directory.
+fn default_journal_dir() -> String {
+    if let Some(home) = std::env::var_os("HOME") {
+        let mut p = std::path::PathBuf::from(home);
+        p.push("Library/Application Support/com.supersearch.app/journal");
+        return p.to_string_lossy().into_owned();
+    }
+    std::env::temp_dir()
+        .join("supersearch/journal")
+        .to_string_lossy()
+        .into_owned()
+}
+
 /// Make the palette behave like a system overlay: it joins every Space *and*
 /// floats over full-screen apps. `CanJoinAllSpaces` (set elsewhere via
 /// `set_visible_on_all_workspaces`) handles normal Spaces, but a full-screen
@@ -97,8 +111,14 @@ pub fn run() {
     info!("SuperSearch v0.1.0 starting");
 
     // 2. Boot the runtime kernel.
+    // Anchor the journal to an absolute path under the user's data dir. A
+    // packaged .app runs with a non-writable CWD (often `/`), so the default
+    // relative "./data/journal" would silently fail to write the audit log.
     let boot_start = Instant::now();
-    let config = KernelConfig::default();
+    let config = KernelConfig {
+        journal_dir: default_journal_dir(),
+        ..KernelConfig::default()
+    };
     let kernel = RuntimeKernel::boot(config);
     let boot_ms = boot_start.elapsed().as_millis() as u64;
     info!(boot_ms, "Runtime kernel booted");

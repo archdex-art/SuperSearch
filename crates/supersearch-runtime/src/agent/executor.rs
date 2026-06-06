@@ -60,6 +60,12 @@ impl AgentExecutor {
     }
 
     /// Execute an entire task graph, returning results for each node.
+    ///
+    /// Honors the per-node IR: each node's [`timeout`](TaskNode::timeout) bounds
+    /// its OS call, [`retry_policy`](TaskNode::retry_policy) re-runs transient
+    /// failures, and when a node ultimately fails, its (transitive) dependents
+    /// are marked `Skipped` and reported — so multi-step results are never
+    /// silently truncated.
     pub fn execute(&self, graph: &mut TaskGraph) -> Vec<StepResult> {
         let mut results = Vec::new();
 
@@ -73,31 +79,51 @@ impl AgentExecutor {
                 let node = &graph.nodes[node_id];
                 let label = node.label.clone();
                 let kind = node.kind.clone();
+                let timeout = node.timeout.unwrap_or(ACTION_TIMEOUT);
+                let max_retries = node.retry_policy.max_retries;
 
                 info!(node_id, label = %label, "Executing task node");
-
-                // Mark as running.
                 graph.nodes[node_id].status = TaskStatus::Running;
 
-                // Capability-mediated execution: authorize → (maybe) execute.
-                let result = self.run_guarded(&kind, &label);
+                // Capability-mediated execution, retrying transient failures.
+                let mut attempts = 0;
+                let mut result = self.run_guarded(&kind, &label, timeout);
+                while !result.success && attempts < max_retries {
+                    attempts += 1;
+                    warn!(node_id, attempt = attempts, max_retries, label = %label, "Retrying node");
+                    result = self.run_guarded(&kind, &label, timeout);
+                }
+                graph.nodes[node_id].retry_policy.current_retries = attempts;
 
-                if result.success {
+                let success = result.success;
+                if success {
                     graph.complete_node(node_id, result.output.clone());
                     debug!(node_id, "Node completed successfully");
                 } else {
-                    let err = result.error.clone().unwrap_or_default();
-                    graph.fail_node(node_id, err);
-                    error!(node_id, label = %label, "Node execution failed");
+                    graph.fail_node(node_id, result.error.clone().unwrap_or_default());
+                    error!(node_id, label = %label, attempts, "Node execution failed");
                 }
 
                 results.push(StepResult {
                     node_id,
-                    label,
-                    success: result.success,
+                    label: label.clone(),
+                    success,
                     output: result.output,
                     error: result.error,
                 });
+
+                // A failed node's dependents can never run — skip and report.
+                if !success {
+                    for skipped_id in self.cascade_skip(graph, node_id) {
+                        results.push(StepResult {
+                            node_id: skipped_id,
+                            label: graph.nodes[skipped_id].label.clone(),
+                            success: false,
+                            output: String::new(),
+                            error: Some(format!("Skipped — prerequisite '{}' failed", label)),
+                        });
+                    }
+                }
             }
 
             if graph.is_finished() {
@@ -108,9 +134,37 @@ impl AgentExecutor {
         results
     }
 
+    /// Mark every (transitive) dependent of a failed node as `Skipped`,
+    /// returning their ids in discovery order.
+    fn cascade_skip(&self, graph: &mut TaskGraph, failed_id: NodeId) -> Vec<NodeId> {
+        let edges: Vec<(NodeId, NodeId)> = graph
+            .edges
+            .iter()
+            .map(|e| (e.prerequisite, e.dependent))
+            .collect();
+
+        let mut skipped = Vec::new();
+        let mut stack = vec![failed_id];
+        while let Some(cur) = stack.pop() {
+            for &(prereq, dep) in &edges {
+                let pending = graph
+                    .nodes
+                    .get(dep)
+                    .map(|n| n.status == TaskStatus::Pending)
+                    .unwrap_or(false);
+                if prereq == cur && pending {
+                    graph.skip_node(dep);
+                    skipped.push(dep);
+                    stack.push(dep);
+                }
+            }
+        }
+        skipped
+    }
+
     /// Authorize a node against the capability gate, then execute it only if
     /// allowed. The gate decision and (on success) the OS result are journaled.
-    fn run_guarded(&self, kind: &TaskNodeKind, label: &str) -> StepResult {
+    fn run_guarded(&self, kind: &TaskNodeKind, label: &str, timeout: Duration) -> StepResult {
         if let Some((namespace, permission)) = Self::required_capability(kind) {
             let decision = self.gate.check(Some(&self.token), &namespace, permission);
             self.journal_decision(label, &namespace, permission, &decision);
@@ -130,7 +184,7 @@ impl AgentExecutor {
             }
         }
 
-        let result = self.execute_node(kind);
+        let result = self.execute_node(kind, timeout);
         self.journal_result(label, &result);
         result
     }
@@ -211,7 +265,7 @@ impl AgentExecutor {
     /// produced by the planner (`SystemCommand` / `SystemInfo` /
     /// `ListRunningApps`) are run through a shell, and those never interpolate
     /// user input.
-    fn execute_node(&self, kind: &TaskNodeKind) -> StepResult {
+    fn execute_node(&self, kind: &TaskNodeKind, timeout: Duration) -> StepResult {
         match kind {
             TaskNodeKind::LaunchApp { app_name, args } => {
                 let label = format!("Launch {}", app_name);
@@ -223,22 +277,22 @@ impl AgentExecutor {
                     v
                 };
                 let arg_refs: Vec<&str> = argv.iter().map(String::as_str).collect();
-                self.run_argv("open", &arg_refs, &label)
+                self.run_argv("open", &arg_refs, &label, timeout)
             }
             TaskNodeKind::OpenFile { path } => {
                 // `--` stops `open` from treating a leading-dash path as a flag.
-                self.run_argv("open", &["--", path], &format!("Open {}", path))
+                self.run_argv("open", &["--", path], &format!("Open {}", path), timeout)
             }
             TaskNodeKind::OpenUrl { url } => {
-                self.run_argv("open", &["--", url], &format!("Open {}", url))
+                self.run_argv("open", &["--", url], &format!("Open {}", url), timeout)
             }
             TaskNodeKind::WebSearch { query } => {
                 let url = format!("https://www.google.com/search?q={}", percent_encode(query));
-                self.run_argv("open", &["--", &url], &format!("Web Search for \"{}\"", query))
+                self.run_argv("open", &["--", &url], &format!("Web Search for \"{}\"", query), timeout)
             }
             TaskNodeKind::FindFiles { query } => {
                 // Spotlight search via argv (no shell); cap results in Rust.
-                let mut r = self.run_argv_output("mdfind", &["-name", query], &format!("Find {}", query));
+                let mut r = self.run_argv_output("mdfind", &["-name", query], &format!("Find {}", query), timeout);
                 if r.success {
                     let capped: String = r.output.lines().take(20).collect::<Vec<_>>().join("\n");
                     r.output = capped;
@@ -246,24 +300,25 @@ impl AgentExecutor {
                 r
             }
             TaskNodeKind::ClipboardRead => {
-                self.run_argv_output("pbpaste", &[], "Read clipboard")
+                self.run_argv_output("pbpaste", &[], "Read clipboard", timeout)
             }
             TaskNodeKind::ClipboardWrite { content } => {
-                self.run_stdin("pbcopy", &[], content, "Write to clipboard")
+                self.run_stdin("pbcopy", &[], content, "Write to clipboard", timeout)
             }
             TaskNodeKind::SystemCommand { script, label } => {
                 // Trusted, constant script generated by the planner.
-                self.run_shell(script, label)
+                self.run_shell(script, label, timeout)
             }
             TaskNodeKind::SystemInfo { command, label } => {
                 // Trusted, constant command generated by the planner.
-                self.run_shell_with_output(command, label)
+                self.run_shell_with_output(command, label, timeout)
             }
             TaskNodeKind::ListRunningApps => {
                 self.run_argv_output(
                     "osascript",
                     &["-e", "tell application \"System Events\" to get name of every process whose background only is false"],
                     "List running apps",
+                    timeout,
                 )
             }
             TaskNodeKind::QuitApp { app_name } => {
@@ -273,6 +328,7 @@ impl AgentExecutor {
                     "osascript",
                     &["-e", "on run argv", "-e", "tell application (item 1 of argv) to quit", "-e", "end run", "--", app_name],
                     &format!("Quit {}", app_name),
+                    timeout,
                 )
             }
             TaskNodeKind::SwitchApp { app_name } => {
@@ -280,6 +336,7 @@ impl AgentExecutor {
                     "osascript",
                     &["-e", "on run argv", "-e", "tell application (item 1 of argv) to activate", "-e", "end run", "--", app_name],
                     &format!("Switch to {}", app_name),
+                    timeout,
                 )
             }
             TaskNodeKind::Noop { reason } => StepResult {
@@ -293,62 +350,52 @@ impl AgentExecutor {
     }
 
     /// Spawn a program directly with an argument vector (no shell).
-    fn run_argv(&self, program: &str, args: &[&str], label: &str) -> StepResult {
+    fn run_argv(&self, program: &str, args: &[&str], label: &str, timeout: Duration) -> StepResult {
         debug!(program, ?args, label, "Executing argv command");
         let mut cmd = Command::new(program);
         cmd.args(args);
-        Self::run_command(cmd, None, label, false)
+        Self::run_command(cmd, None, label, false, timeout)
     }
 
     /// Spawn a program directly and capture its stdout.
-    fn run_argv_output(&self, program: &str, args: &[&str], label: &str) -> StepResult {
+    fn run_argv_output(&self, program: &str, args: &[&str], label: &str, timeout: Duration) -> StepResult {
         debug!(program, ?args, label, "Executing argv command (capturing output)");
         let mut cmd = Command::new(program);
         cmd.args(args);
-        Self::run_command(cmd, None, label, true)
+        Self::run_command(cmd, None, label, true, timeout)
     }
 
     /// Spawn a program directly, writing `input` to its stdin.
-    fn run_stdin(&self, program: &str, args: &[&str], input: &str, label: &str) -> StepResult {
+    fn run_stdin(&self, program: &str, args: &[&str], input: &str, label: &str, timeout: Duration) -> StepResult {
         debug!(program, label, "Executing argv command with stdin");
         let mut cmd = Command::new(program);
         cmd.args(args);
-        Self::run_command(cmd, Some(input), label, false)
+        Self::run_command(cmd, Some(input), label, false, timeout)
     }
 
     /// Run a trusted, constant shell command, returning success/failure.
     ///
     /// Only used for planner-generated constant scripts — never user input.
-    fn run_shell(&self, cmd: &str, label: &str) -> StepResult {
+    fn run_shell(&self, cmd: &str, label: &str, timeout: Duration) -> StepResult {
         debug!(cmd, label, "Executing trusted shell command");
         let mut command = Command::new("sh");
         command.arg("-c").arg(cmd);
-        Self::run_command(command, None, label, false)
+        Self::run_command(command, None, label, false, timeout)
     }
 
     /// Run a trusted, constant shell command and capture its stdout.
-    fn run_shell_with_output(&self, cmd: &str, label: &str) -> StepResult {
+    fn run_shell_with_output(&self, cmd: &str, label: &str, timeout: Duration) -> StepResult {
         debug!(cmd, label, "Executing trusted shell command (capturing output)");
         let mut command = Command::new("sh");
         command.arg("-c").arg(cmd);
-        Self::run_command(command, None, label, true)
+        Self::run_command(command, None, label, true, timeout)
     }
 
     /// Spawn `cmd`, optionally feeding `input` to its stdin, and wait for it to
-    /// exit — but never longer than [`ACTION_TIMEOUT`]. A process that overruns
-    /// the deadline is killed so a hung `osascript`/`open` can't wedge the
-    /// caller (which, in the app, is the synchronous IPC thread).
+    /// exit — but never longer than `timeout`. A process that overruns the
+    /// deadline is killed so a hung `osascript`/`open` can't wedge the caller
+    /// (which, in the app, is the synchronous IPC thread).
     fn run_command(
-        cmd: Command,
-        input: Option<&str>,
-        label: &str,
-        capture: bool,
-    ) -> StepResult {
-        Self::run_command_with(cmd, input, label, capture, ACTION_TIMEOUT)
-    }
-
-    /// As [`run_command`], but with an explicit timeout (used by tests).
-    fn run_command_with(
         mut cmd: Command,
         input: Option<&str>,
         label: &str,
@@ -497,7 +544,7 @@ mod tests {
         let start = Instant::now();
         let mut cmd = Command::new("sleep");
         cmd.arg("30");
-        let result = AgentExecutor::run_command_with(
+        let result = AgentExecutor::run_command(
             cmd,
             None,
             "sleep",
@@ -507,6 +554,42 @@ mod tests {
         assert!(!result.success);
         assert!(result.error.unwrap_or_default().contains("Timed out"));
         assert!(start.elapsed() < Duration::from_secs(5), "did not honor the deadline");
+    }
+
+    #[test]
+    fn failed_prerequisite_skips_and_reports_dependents() {
+        // A two-node sequential graph where the first node fails: the second
+        // must be reported as Skipped, not silently dropped.
+        let exec = executor_with(vec![Permission::ClipboardRead]); // lacks ClipboardWrite
+        let mut graph = TaskGraph::new("multi");
+        // Node 0 will be DENIED (no ClipboardWrite grant) → fails.
+        let n0 = graph.add_node("write", TaskNodeKind::ClipboardWrite { content: "x".into() });
+        let n1 = graph.add_node("read", TaskNodeKind::ClipboardRead);
+        graph.add_edge(n0, n1); // n1 depends on n0
+
+        let results = exec.execute(&mut graph);
+        assert_eq!(results.len(), 2, "both nodes should be reported");
+        assert!(!results[0].success);
+        assert!(!results[1].success);
+        assert!(results[1].error.as_deref().unwrap_or_default().contains("Skipped"));
+        assert_eq!(graph.nodes[n1].status, TaskStatus::Skipped);
+    }
+
+    #[test]
+    fn per_node_timeout_is_honored() {
+        // A node with a short timeout running a slow trusted script must time out.
+        let exec = executor_with(vec![Permission::InputSimulate]);
+        let mut graph = TaskGraph::new("slow");
+        let id = graph.add_node(
+            "slow",
+            TaskNodeKind::SystemCommand { script: "sleep 30".into(), label: "slow".into() },
+        );
+        graph.nodes[id].timeout = Some(Duration::from_millis(200));
+        let start = Instant::now();
+        let results = exec.execute(&mut graph);
+        assert!(!results[0].success);
+        assert!(results[0].error.as_deref().unwrap_or_default().contains("Timed out"));
+        assert!(start.elapsed() < Duration::from_secs(5));
     }
 
     #[test]
@@ -521,10 +604,11 @@ mod tests {
         let write = exec.run_guarded(
             &TaskNodeKind::ClipboardWrite { content: payload.to_string() },
             "Write to clipboard",
+            ACTION_TIMEOUT,
         );
         assert!(write.success, "clipboard write failed: {:?}", write.error);
 
-        let read = exec.run_guarded(&TaskNodeKind::ClipboardRead, "Read clipboard");
+        let read = exec.run_guarded(&TaskNodeKind::ClipboardRead, "Read clipboard", ACTION_TIMEOUT);
         assert!(read.success);
         assert_eq!(read.output, payload, "payload was altered or interpreted");
         assert!(
@@ -542,6 +626,7 @@ mod tests {
         let result = exec.run_guarded(
             &TaskNodeKind::ClipboardWrite { content: sentinel.to_string() },
             "Write to clipboard",
+            ACTION_TIMEOUT,
         );
         assert!(!result.success, "denied action unexpectedly succeeded");
         assert!(
@@ -555,7 +640,7 @@ mod tests {
         // platform-independent and already checked above.)
         if cfg!(target_os = "macos") {
             let reader = executor_with(vec![Permission::ClipboardRead]);
-            let read = reader.run_guarded(&TaskNodeKind::ClipboardRead, "Read clipboard");
+            let read = reader.run_guarded(&TaskNodeKind::ClipboardRead, "Read clipboard", ACTION_TIMEOUT);
             assert_ne!(read.output, sentinel, "blocked write still reached the OS");
         }
     }
@@ -564,7 +649,7 @@ mod tests {
     fn noop_requires_no_capability() {
         // A token with zero permissions can still run a Noop.
         let exec = executor_with(vec![]);
-        let r = exec.run_guarded(&TaskNodeKind::Noop { reason: "nothing".into() }, "noop");
+        let r = exec.run_guarded(&TaskNodeKind::Noop { reason: "nothing".into() }, "noop", ACTION_TIMEOUT);
         assert!(r.success);
     }
 }
