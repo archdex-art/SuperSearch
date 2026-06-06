@@ -66,7 +66,9 @@ The compiled binary will be located at `src-tauri/target/release/bundle/macos/Su
 ## ⌨️ Usage Guide
 
 ### 1. Unified Search
-Trigger the palette and just start typing. It fuzzy-matches system settings (`Sleep`, `Empty Trash`), Applications (`Spotify`, `Xcode`), and local files.
+Press **⌥ Space (Option+Space)** anywhere to summon the palette, then just start typing — it fuzzy-matches system settings (`Sleep`, `Empty Trash`), Applications (`Spotify`, `Xcode`), and local files. Press the hotkey again, hit **Esc**, or click away to dismiss it (Spotlight-style). SuperSearch runs as a menu-bar/accessory app with no Dock icon and floats over full-screen apps.
+
+> First launch will register the global shortcut and request Accessibility/Input-Monitoring permission. If Option+Space doesn't summon the window, grant SuperSearch access under **System Settings → Privacy & Security**.
 
 ### 2. Natural Language Agent
 Type full conversational commands to trigger the Runtime Kernel:

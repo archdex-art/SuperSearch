@@ -7,11 +7,37 @@ mod state;
 mod commands;
 
 use std::time::Instant;
-use tracing::info;
+use tracing::{error, info};
 
+use tauri::{Emitter, Manager};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 use supersearch_runtime::kernel::runtime::{RuntimeKernel, KernelConfig};
 use state::AppState;
+
+/// Global hotkey that summons / dismisses the palette. `Alt` is the macOS
+/// Option key, so this is Option+Space — the Spotlight-style chord.
+const TOGGLE_SHORTCUT: &str = "Alt+Space";
+
+/// Show, center, and focus the palette, then tell the UI to reset its input.
+fn show_palette(window: &tauri::WebviewWindow) {
+    let _ = window.center();
+    let _ = window.show();
+    let _ = window.set_focus();
+    // Clear any stale query and refocus the search box on every summon.
+    let _ = window.emit("supersearch://reset", ());
+}
+
+/// Toggle palette visibility (the global-shortcut action).
+fn toggle_palette(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        if window.is_visible().unwrap_or(false) {
+            let _ = window.hide();
+        } else {
+            show_palette(&window);
+        }
+    }
+}
 
 /// Build and configure the Tauri application.
 ///
@@ -57,17 +83,56 @@ pub fn run() {
             commands::agent::agent_query,
             commands::agent::agent_check,
         ])
-        .setup(|_app| {
+        // Spotlight-style dismiss: hide the palette when it loses focus
+        // (e.g. the user clicks another app). Release-only so DevTools focus
+        // changes don't fight us during development.
+        .on_window_event(|window, event| {
+            #[cfg(not(debug_assertions))]
+            if let tauri::WindowEvent::Focused(false) = event {
+                if window.label() == "main" {
+                    let _ = window.hide();
+                }
+            }
+            // Silence unused-variable warnings in debug builds.
+            let _ = (window, event);
+        })
+        .setup(|app| {
             info!("Tauri setup complete — WebView ready");
 
+            // Run as an accessory app: no Dock icon, floats as an overlay over
+            // other apps (including full-screen), like Spotlight.
             #[cfg(target_os = "macos")]
             {
-                // Trigger macOS Accessibility permission prompt
+                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+                // Trigger macOS Accessibility permission prompt early.
                 info!("Requesting macOS accessibility permissions if not granted...");
                 let _ = std::process::Command::new("osascript")
                     .arg("-e")
                     .arg("tell application \"System Events\" to get name of every process")
                     .output();
+            }
+
+            // Register the global summon/dismiss hotkey (Option+Space).
+            let handle = app.handle().clone();
+            if let Err(e) = app.global_shortcut().on_shortcut(
+                TOGGLE_SHORTCUT,
+                move |app, _shortcut, event| {
+                    // Fire on key-down only; ignore the key-up event.
+                    if event.state == ShortcutState::Pressed {
+                        toggle_palette(app);
+                    }
+                },
+            ) {
+                error!(error = %e, shortcut = TOGGLE_SHORTCUT, "Failed to register global shortcut");
+            } else {
+                info!(shortcut = TOGGLE_SHORTCUT, "Global toggle shortcut registered");
+            }
+
+            // Show the palette once on first launch so the app isn't invisible
+            // before the user discovers the hotkey.
+            if let Some(window) = handle.get_webview_window("main") {
+                show_palette(&window);
             }
 
             // Spawn kernel run loop in background.

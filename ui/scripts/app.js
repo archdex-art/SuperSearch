@@ -119,6 +119,26 @@ export function init() {
   // Auto-focus search input
   searchInput.focus();
 
+  // When the palette is summoned via the global hotkey (Option+Space), the
+  // backend emits `supersearch://reset`. Clear stale state and refocus so the
+  // user always lands on an empty, ready prompt — like Spotlight.
+  Bridge.listen('supersearch://reset', () => {
+    searchInput.value = '';
+    currentResults = [];
+    selectedIndex = -1;
+    if (agentMode) {
+      agentMode = false;
+      Agent.hide();
+      agentPanel.classList.remove('active');
+      contentArea.style.display = '';
+      if (modeBadge) modeBadge.textContent = '⌥ Space';
+    }
+    Search.search('');
+    renderResults(resultsPanel);
+    updatePreview();
+    searchInput.focus();
+  });
+
   // Start telemetry polling
   startTelemetry();
 
