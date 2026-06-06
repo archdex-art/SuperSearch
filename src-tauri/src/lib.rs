@@ -21,6 +21,39 @@ use state::AppState;
 /// Option key, so this is Option+Space — the Spotlight-style chord.
 const TOGGLE_SHORTCUT: &str = "Alt+Space";
 
+/// Make the palette behave like a system overlay: it joins every Space *and*
+/// floats over full-screen apps. `CanJoinAllSpaces` (set elsewhere via
+/// `set_visible_on_all_workspaces`) handles normal Spaces, but a full-screen
+/// app is its own Space, so the window also needs `FullScreenAuxiliary` — a
+/// collection-behavior flag Tauri doesn't expose, so we set it on the NSWindow.
+#[cfg(target_os = "macos")]
+fn enable_fullscreen_overlay(window: &tauri::WebviewWindow) {
+    use objc2::msg_send;
+    use objc2::runtime::AnyObject;
+
+    // NSWindowCollectionBehavior bit flags (AppKit).
+    const NS_CAN_JOIN_ALL_SPACES: usize = 1 << 0;
+    const NS_FULLSCREEN_AUXILIARY: usize = 1 << 8;
+
+    match window.ns_window() {
+        Ok(ptr) => {
+            let ns_window = ptr as *mut AnyObject;
+            // SAFETY: `ns_window` is a valid NSWindow pointer owned by the
+            // window for its lifetime; we only read and re-set its collection
+            // behavior (a plain bitmask), adding flags without dropping any.
+            unsafe {
+                let current: usize = msg_send![ns_window, collectionBehavior];
+                let behavior = current | NS_CAN_JOIN_ALL_SPACES | NS_FULLSCREEN_AUXILIARY;
+                let _: () = msg_send![ns_window, setCollectionBehavior: behavior];
+            }
+        }
+        Err(e) => error!(error = %e, "Could not access NSWindow for overlay setup"),
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn enable_fullscreen_overlay(_window: &tauri::WebviewWindow) {}
+
 /// Show, center, and focus the palette, then tell the UI to reset its input.
 fn show_palette(window: &tauri::WebviewWindow) {
     let _ = window.center();
@@ -146,6 +179,8 @@ pub fn run() {
                     error!(error = %e, "Failed to set visible-on-all-workspaces");
                 }
                 let _ = window.set_always_on_top(true);
+                // Also float over full-screen apps (adds FullScreenAuxiliary).
+                enable_fullscreen_overlay(&window);
 
                 // Show the palette once on first launch so the app isn't
                 // invisible before the user discovers the hotkey.

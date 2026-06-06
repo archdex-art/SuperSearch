@@ -15,6 +15,11 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 parking_lot = "0.12"
 
+# macOS-only: set the NSWindow collection behavior so the palette can overlay
+# full-screen Spaces (FullScreenAuxiliary), which Tauri's helper doesn't expose.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
