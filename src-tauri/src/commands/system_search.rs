@@ -245,7 +245,7 @@ fn load_applications() -> Vec<AppEntry> {
         }
     }
 
-    apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    apps.sort_by_key(|a| a.name.to_lowercase());
     debug!(count = apps.len(), "Application index loaded");
     apps
 }

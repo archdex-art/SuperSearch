@@ -54,6 +54,12 @@ pub struct CapabilityRegistry {
     kernel_key: [u8; 32],
 }
 
+impl Default for CapabilityRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CapabilityRegistry {
     /// Create a new registry with a randomly generated kernel key.
     pub fn new() -> Self {
@@ -112,7 +118,7 @@ impl CapabilityRegistry {
         self.grants.insert(id, record);
         self.by_grantee
             .entry(grantee.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(id);
 
         info!(

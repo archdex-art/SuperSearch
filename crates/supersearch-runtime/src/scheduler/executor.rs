@@ -91,6 +91,9 @@ impl FastPathSink for NoopFastPathSink {
 pub struct SchedulerExecutor {
     queue: Arc<MultiQueue>,
     config: SchedulerConfig,
+    /// Reserved: supervises restart of failed system tasks. Constructed and
+    /// owned by the executor; restart wiring is still pending.
+    #[allow(dead_code)]
     supervisor: Supervisor,
     fast_path_sink: Arc<dyn FastPathSink>,
     /// Notification channel for waking the scheduler when new tasks arrive.

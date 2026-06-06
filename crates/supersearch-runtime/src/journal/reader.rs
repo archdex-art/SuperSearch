@@ -27,6 +27,9 @@ pub enum ReaderError {
 pub struct SegmentIterator {
     data: Vec<u8>,
     offset: usize,
+    /// Source segment path, retained for diagnostics/error context on corrupt
+    /// reads. Not yet surfaced in returned errors.
+    #[allow(dead_code)]
     segment_path: PathBuf,
     entries_read: u64,
     validate_checksums: bool,

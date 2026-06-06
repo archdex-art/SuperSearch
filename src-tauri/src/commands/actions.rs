@@ -12,6 +12,10 @@ use supersearch_runtime::journal::{EntryKind, JournalEntry};
 #[derive(Debug, Clone, Deserialize)]
 pub struct ExecuteActionRequest {
     pub action_id: String,
+    /// Whether the caller held a modifier key (e.g. ⌘) when triggering the
+    /// action. Part of the IPC contract; reserved for alternate-execution
+    /// behavior (open-in-background, reveal-in-Finder) — not yet branched on.
+    #[allow(dead_code)]
     pub with_meta: bool,
 }
 
@@ -44,9 +48,8 @@ pub fn execute_action(
     }
     info!(action_id, "Executing action");
 
-    let response = if action_id.starts_with("app:") {
+    let response = if let Some(app_path) = action_id.strip_prefix("app:") {
         // Launch application.
-        let app_path = &action_id[4..];
         execute_argv(
             "open",
             &["--", app_path],
@@ -54,9 +57,8 @@ pub fn execute_action(
             "Launch App",
             "Application",
         )?
-    } else if action_id.starts_with("file:") {
+    } else if let Some(file_path) = action_id.strip_prefix("file:") {
         // Open file.
-        let file_path = &action_id[5..];
         execute_argv(
             "open",
             &["--", file_path],
@@ -64,10 +66,9 @@ pub fn execute_action(
             "Open File",
             "File",
         )?
-    } else if action_id.starts_with("terminal:") {
+    } else if let Some(cmd) = action_id.strip_prefix("terminal:") {
         // Open terminal and execute command. The command is passed as an
         // AppleScript argv item, so it cannot break out of the script string.
-        let cmd = &action_id[9..];
         execute_argv(
             "osascript",
             &[
@@ -83,8 +84,8 @@ pub fn execute_action(
             "Terminal Command",
             "System",
         )?
-    } else if action_id.starts_with("appcmd:") {
-        let parts: Vec<&str> = action_id[7..].splitn(2, '|').collect();
+    } else if let Some(appcmd) = action_id.strip_prefix("appcmd:") {
+        let parts: Vec<&str> = appcmd.splitn(2, '|').collect();
         if parts.len() == 2 {
             let app_name = parts[0];
             let task = parts[1];
@@ -116,9 +117,8 @@ pub fn execute_action(
         } else {
             return Err("Invalid appcmd format".into());
         }
-    } else if action_id.starts_with("agent:") {
+    } else if let Some(query) = action_id.strip_prefix("agent:") {
         // Execute via agent.
-        let query = &action_id[6..];
         let agent_response = state.agent.process_query(query);
         ExecuteActionResponse {
             action_id: action_id.to_string(),

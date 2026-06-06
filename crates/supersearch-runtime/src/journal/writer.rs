@@ -106,6 +106,9 @@ impl Segment {
         // In production: msync + chmod read-only.
     }
 
+    /// Bytes left before this segment must rotate. Used by the (pending)
+    /// segment-rotation path.
+    #[allow(dead_code)]
     fn remaining(&self) -> usize {
         self.capacity.saturating_sub(self.write_offset)
     }
@@ -225,7 +228,7 @@ impl JournalWriter {
         match self.active_segment.write(&entry) {
             Ok(_bytes) => {
                 self.total_entries += 1;
-                if self.total_entries % 10_000 == 0 {
+                if self.total_entries.is_multiple_of(10_000) {
                     debug!(total = self.total_entries, bytes_used = self.active_segment.write_offset, "Journal progress");
                 }
                 Ok(())

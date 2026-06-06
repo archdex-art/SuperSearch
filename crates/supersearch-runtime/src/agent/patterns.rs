@@ -82,6 +82,12 @@ pub enum InfoKind {
 /// No heap allocation beyond the returned `AgentIntent`.
 pub struct PatternEngine;
 
+impl Default for PatternEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PatternEngine {
     pub fn new() -> Self {
         Self
@@ -333,7 +339,7 @@ impl PatternEngine {
 
 /// Check if `input` matches any of the given patterns exactly.
 fn matches_any(input: &str, patterns: &[&str]) -> bool {
-    patterns.iter().any(|p| input == *p)
+    patterns.contains(&input)
 }
 
 /// Strip any matching prefix, returning the remainder.

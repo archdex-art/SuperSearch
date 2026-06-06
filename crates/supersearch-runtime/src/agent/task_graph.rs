@@ -103,6 +103,7 @@ pub enum TaskStatus {
 
 /// Retry policy for a task node.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct RetryPolicy {
     /// Maximum retry attempts (0 = no retries).
     pub max_retries: u32,
@@ -230,11 +231,6 @@ impl TaskGraph {
     }
 }
 
-impl Default for RetryPolicy {
-    fn default() -> Self {
-        Self { max_retries: 0, current_retries: 0 }
-    }
-}
 
 /// Generate a short unique execution ID.
 fn generate_id() -> String {

@@ -68,7 +68,9 @@ pub struct PluginHost {
     plugins: HashMap<String, LoadedPlugin>,
     /// Shared capability registry.
     registry: Arc<CapabilityRegistry>,
-    /// Shared capability gate.
+    /// Shared capability gate. Reserved: plugins will present their injected
+    /// tokens here before each privileged call once the sandbox is wired.
+    #[allow(dead_code)]
     gate: Arc<CapabilityGate>,
     /// IPC channel buffer size.
     ipc_buffer_size: usize,

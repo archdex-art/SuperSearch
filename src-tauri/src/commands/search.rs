@@ -3,7 +3,7 @@
 //! Queries applications, files (Spotlight), and system commands,
 //! then merges and ranks results by fuzzy score.
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::command;
 
 use super::system_search;
@@ -18,12 +18,6 @@ pub struct SearchResult {
     pub category: String,
     pub icon: String,
     pub score: f64,
-}
-
-/// Search query from the frontend.
-#[derive(Debug, Deserialize)]
-pub struct SearchQuery {
-    pub query: String,
 }
 
 /// Execute a unified search query across all indexes.
@@ -43,15 +37,15 @@ pub fn search_query(query: String, state: tauri::State<'_, AppState>) -> Vec<Sea
     let mut results = Vec::new();
 
     // 1. Terminal commands
-    if q.starts_with("$") || q.starts_with("/terminal ") {
-        let cmd = if q.starts_with("$ ") {
-            &q[2..]
-        } else if q.starts_with("$") {
-            &q[1..]
+    if q.starts_with('$') || q.starts_with("/terminal ") {
+        let cmd = if let Some(rest) = q.strip_prefix("$ ") {
+            rest
+        } else if let Some(rest) = q.strip_prefix('$') {
+            rest
         } else {
             &q[10..]
         };
-        
+
         if !cmd.trim().is_empty() {
             results.push(SearchResult {
                 id: format!("terminal:{}", cmd),
@@ -98,32 +92,29 @@ pub fn search_query(query: String, state: tauri::State<'_, AppState>) -> Vec<Sea
     let mut system_apps = system_search::search_applications(&q_lower);
     results.append(&mut system_apps);
 
-    // 3. Files via Spotlight
-    let mut files = system_search::search_files(&q_lower);
-    results.append(&mut files);
+    // 2. Files via Spotlight (skip 1-char queries to avoid noise / a costly
+    //    mdfind that matches nearly everything).
+    if q.len() >= 2 {
+        let mut files = system_search::search_files(&q_lower);
+        results.append(&mut files);
+    }
 
-    // 2. System commands (fuzzy filtered).
+    // 3. System commands (fuzzy filtered).
     let sys_commands = system_search::system_commands();
     for mut cmd in sys_commands {
         let title_lower = cmd.title.to_lowercase();
         let subtitle_lower = cmd.subtitle.to_lowercase();
 
-        if title_lower.contains(&q) {
+        if title_lower.contains(q) {
             cmd.score = 0.85;
             results.push(cmd);
-        } else if subtitle_lower.contains(&q) {
+        } else if subtitle_lower.contains(q) {
             cmd.score = 0.5;
             results.push(cmd);
         } else if q.chars().all(|c| title_lower.contains(c)) {
             cmd.score = 0.25;
             results.push(cmd);
         }
-    }
-
-    // 3. File search (only for queries ≥ 2 chars to avoid noise).
-    if q.len() >= 2 {
-        let file_results = system_search::search_files(&q);
-        results.extend(file_results);
     }
 
     // 4. If it looks like a natural-language command, add an "Ask Agent" result.

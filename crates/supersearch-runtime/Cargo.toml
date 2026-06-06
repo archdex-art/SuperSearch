@@ -43,10 +43,3 @@ tempfile = "3.13"
 [[bench]]
 name = "scheduler_bench"
 harness = false
-
-[profile.release]
-lto = "fat"
-codegen-units = 1
-opt-level = 3
-panic = "abort"
-strip = "symbols"

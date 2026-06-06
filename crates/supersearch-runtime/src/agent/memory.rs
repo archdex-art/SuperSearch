@@ -33,6 +33,12 @@ pub struct MemoryEntry {
     pub result_summary: String,
 }
 
+impl Default for AgentMemory {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AgentMemory {
     pub fn new() -> Self {
         Self {

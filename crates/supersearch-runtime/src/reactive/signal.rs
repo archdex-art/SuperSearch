@@ -36,9 +36,7 @@ impl Signal {
     }
 
     /// Get the current value of this signal.
-    pub fn get<T: Any + Send + Sync>(&self, graph: &DependencyGraph) -> Option<T>
-    where T: Clone,
-    {
+    pub fn get<T: Any + Send + Sync + Clone>(&self, graph: &DependencyGraph) -> Option<T> {
         graph.get_node(&self.id)
             .and_then(|node| node.get::<T>().cloned())
     }
@@ -83,9 +81,7 @@ impl Computed {
     }
 
     /// Get the cached value.
-    pub fn get<T: Any + Send + Sync>(&self, graph: &DependencyGraph) -> Option<T>
-    where T: Clone,
-    {
+    pub fn get<T: Any + Send + Sync + Clone>(&self, graph: &DependencyGraph) -> Option<T> {
         graph.get_node(&self.id)
             .and_then(|node| node.get::<T>().cloned())
     }

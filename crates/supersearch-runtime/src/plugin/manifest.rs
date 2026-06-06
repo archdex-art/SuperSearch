@@ -108,15 +108,14 @@ impl PluginManifest {
         // priority ceiling (e.g., a plugin with UserBlocking ceiling
         // should not request TaskSpawnCritical).
         for req in &self.permissions {
-            if !req.optional {
-                if matches!(req.permission, Permission::TaskSpawnCritical)
+            if !req.optional
+                && matches!(req.permission, Permission::TaskSpawnCritical)
                     && self.resource_limits.priority_ceiling
                         > crate::scheduler::priority::PriorityClass::Critical
                 {
                     // This is actually always fine because Critical is 0 (lowest enum value)
                     // but the real check is against the ceiling.
                 }
-            }
         }
         Ok(())
     }

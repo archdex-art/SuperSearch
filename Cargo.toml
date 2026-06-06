@@ -4,3 +4,12 @@ members = [
     "src-tauri",
 ]
 resolver = "2"
+
+# Production release profile (applies workspace-wide). Cargo forces panic=unwind
+# for test/bench artifacts, so these settings don't affect the test suite.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+panic = "abort"
+strip = "symbols"
