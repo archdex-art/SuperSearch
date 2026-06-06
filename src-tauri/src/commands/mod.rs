@@ -2,6 +2,7 @@
 
 pub mod actions;
 pub mod agent;
+pub mod extensions;
 pub mod search;
 pub mod system_search;
 pub mod telemetry;

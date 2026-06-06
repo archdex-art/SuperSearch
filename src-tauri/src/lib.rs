@@ -6,12 +6,14 @@
 mod state;
 mod commands;
 
+use std::sync::Arc;
 use std::time::Instant;
 use tracing::{error, info};
 
 use tauri::{Emitter, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
+use supersearch_runtime::extension::ExtensionRegistry;
 use supersearch_runtime::kernel::runtime::{RuntimeKernel, KernelConfig};
 use state::AppState;
 
@@ -82,6 +84,12 @@ pub fn run() {
             commands::search::search_query,
             commands::agent::agent_query,
             commands::agent::agent_check,
+            commands::extensions::list_extensions,
+            commands::extensions::install_extension,
+            commands::extensions::uninstall_extension,
+            commands::extensions::set_extension_enabled,
+            commands::extensions::query_extensions,
+            commands::extensions::execute_extension_action,
         ])
         // Spotlight-style dismiss: hide the palette when it loses focus
         // (e.g. the user clicks another app). Release-only so DevTools focus
@@ -142,6 +150,26 @@ pub fn run() {
                 // Show the palette once on first launch so the app isn't
                 // invisible before the user discovers the hotkey.
                 show_palette(&window);
+            }
+
+            // Initialize the extension registry. It shares the kernel's
+            // capability registry + gate so extension tokens live in the same
+            // capability system the agent uses.
+            {
+                let (caps, gate) = {
+                    let app_state = app.state::<AppState>();
+                    (app_state.registry.clone(), app_state.gate.clone())
+                };
+                let ext_dir = app
+                    .path()
+                    .app_data_dir()
+                    .unwrap_or_else(|_| std::path::PathBuf::from("."))
+                    .join("extensions");
+                let ext_registry = Arc::new(ExtensionRegistry::new(ext_dir, caps, gate));
+                if let Err(e) = ext_registry.load() {
+                    error!(error = %e, "Failed to load extensions");
+                }
+                app.manage(ext_registry);
             }
 
             // Spawn kernel run loop in background.

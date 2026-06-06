@@ -9,6 +9,7 @@ use supersearch_runtime::kernel::RuntimeKernel;
 use supersearch_runtime::journal::writer::JournalSender;
 use supersearch_runtime::scheduler::queue::MultiQueue;
 use supersearch_runtime::capability::registry::CapabilityRegistry;
+use supersearch_runtime::capability::gate::CapabilityGate;
 use supersearch_runtime::agent::AgentController;
 
 /// Shared application state managed by Tauri.
@@ -21,6 +22,8 @@ pub struct AppState {
     pub queue: Arc<MultiQueue>,
     /// The capability registry (thread-safe via DashMap).
     pub registry: Arc<CapabilityRegistry>,
+    /// The capability gate — mediates extension/agent OS access.
+    pub gate: Arc<CapabilityGate>,
     /// Journal sender for emitting events (cloneable, thread-safe).
     pub journal_sender: JournalSender,
     /// When the kernel was booted (for uptime telemetry).
@@ -40,6 +43,7 @@ impl AppState {
         Self {
             queue: kernel.queue.clone(),
             registry: kernel.registry.clone(),
+            gate: kernel.gate.clone(),
             journal_sender: kernel.journal_sender.clone(),
             boot_instant: Instant::now(),
             boot_time_ms: boot_duration_ms,

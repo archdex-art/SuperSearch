@@ -32,3 +32,4 @@ pub mod reactive;
 pub mod plugin;
 pub mod kernel;
 pub mod agent;
+pub mod extension;

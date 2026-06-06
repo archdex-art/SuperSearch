@@ -88,6 +88,47 @@ Use the `$` or `/terminal` prefix to instantly open Terminal and run a bash proc
 
 ---
 
+## 🧩 Extensions
+
+SuperSearch is extensible. An extension is a directory with a `manifest.toml`
+and an entrypoint, installed under
+`~/Library/Application Support/com.supersearch.app/extensions/`.
+
+Two execution models share one registry and (forthcoming) manager UI:
+- **Script extensions (available now):** the entrypoint is a native script run
+  as a subprocess — argv, no shell, hard 10s timeout.
+- **WASM extensions (planned):** sandboxed `.wasm` modules for untrusted
+  third-party publishers; declared in manifests, not yet executed.
+
+**Capability-gated & consent-based.** Enabling an extension grants it a
+*revocable* capability token scoped to `plugin.<id>`, covering exactly the
+permissions its manifest requests (each with a justification shown at enable
+time). Result-actions (`open_url`, `open_path`, `copy`) are checked against that
+token by the same gate the agent uses — an action the extension didn't request
+is denied before it touches the OS.
+
+**Manifest** (`manifest.toml`):
+```toml
+id = "ddg"
+name = "DuckDuckGo Search"
+version = "1.0.0"
+kind = "script"
+entrypoint = "run.sh"
+keywords = ["ddg", "search"]   # empty = consulted for every query
+
+[[permissions]]
+permission = "NetworkConnect"
+justification = "Open search results in your default browser"
+```
+
+**Script contract:** invoked as `run.sh "<query>"`; print a JSON array of
+`{ title, subtitle?, action? }` to stdout. A runnable example lives in
+[`examples/extensions/ddg/`](examples/extensions/ddg/).
+
+IPC surface (backing the manager UI): `list_extensions`, `install_extension`,
+`uninstall_extension`, `set_extension_enabled`, `query_extensions`,
+`execute_extension_action`.
+
 ## 🛡️ Security Model
 
 Because SuperSearch can autonomously drive your OS, the threat model matters. Here is what is **actually enforced today**, not what is aspirational:
