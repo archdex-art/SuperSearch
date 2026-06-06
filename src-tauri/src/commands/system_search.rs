@@ -66,16 +66,11 @@ pub fn search_files(query: &str) -> Vec<SearchResult> {
         return Vec::new();
     }
 
-    let cmd = format!(
-        "mdfind -name \"{}\" 2>/dev/null | head -12",
-        query.replace('"', "\\\"")
-    );
-
-    let output = match Command::new("sh")
-        .arg("-c")
-        .arg(&cmd)
-        .output()
-    {
+    // Spawn mdfind directly with an argument vector — never via `sh -c` — so a
+    // query like `` `id` `` or `$(...)` is treated as a literal search term, not
+    // a shell command. This path runs on every keystroke, so it is a prime
+    // injection target if interpolated into a shell string.
+    let output = match Command::new("mdfind").arg("-name").arg(query).output() {
         Ok(out) => out,
         Err(e) => {
             debug!(error = %e, "mdfind failed");
@@ -91,6 +86,7 @@ pub fn search_files(query: &str) -> Vec<SearchResult> {
     stdout
         .lines()
         .filter(|line| !line.is_empty())
+        .take(12)
         .enumerate()
         .map(|(i, path)| {
             let filename = path.rsplit('/').next().unwrap_or(path);
