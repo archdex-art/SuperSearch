@@ -18,6 +18,8 @@
     <!-- Title Bar (drag region) -->
     <div class="title-bar">
       <span class="title-bar__label">SuperSearch</span>
+      <button id="extensions-btn" class="title-bar__action" type="button"
+              title="Manage Extensions" aria-label="Manage Extensions">🧩</button>
     </div>
 
     <!-- Search Bar -->
@@ -109,6 +111,35 @@
         <span class="shortcut__label">Close</span>
       </div>
     </nav>
+
+    <!-- Extension Manager (overlay) -->
+    <div id="extensions-overlay" class="ext-overlay" hidden>
+      <div class="ext-panel" role="dialog" aria-modal="true" aria-label="Extension Manager">
+        <header class="ext-panel__header">
+          <h2 class="ext-panel__title">Extensions</h2>
+          <div class="ext-panel__actions">
+            <button id="ext-install-btn" class="ext-btn ext-btn--primary" type="button">Install…</button>
+            <button id="ext-close-btn" class="ext-btn ext-btn--icon" type="button" aria-label="Close">✕</button>
+          </div>
+        </header>
+        <div id="ext-list" class="ext-list" role="list">
+          <!-- Rendered by extensions.js -->
+        </div>
+      </div>
+
+      <!-- Permission consent modal -->
+      <div id="ext-consent" class="ext-consent" hidden>
+        <div class="ext-consent__box" role="dialog" aria-modal="true" aria-label="Permission Consent">
+          <h3 id="ext-consent-title" class="ext-consent__title"></h3>
+          <p class="ext-consent__sub">This extension is requesting:</p>
+          <ul id="ext-consent-perms" class="ext-consent__perms"></ul>
+          <div class="ext-consent__actions">
+            <button id="ext-consent-cancel" class="ext-btn" type="button">Cancel</button>
+            <button id="ext-consent-confirm" class="ext-btn ext-btn--primary" type="button">Allow &amp; Enable</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
   </main>
 

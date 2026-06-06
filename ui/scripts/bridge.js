@@ -31,6 +31,15 @@ const MOCK_SYS_COMMANDS = [
   { id: 'sys:system_info', title: 'System Info', subtitle: 'View system information', category: 'System', icon: 'ℹ️', score: 0.0 },
 ];
 
+// In-memory extension list for browser-dev mock mode.
+let MOCK_EXTENSIONS = [
+  {
+    id: 'ddg', name: 'DuckDuckGo Search', version: '1.0.0', author: 'SuperSearch',
+    description: 'Open a DuckDuckGo web search for your query', kind: 'script', enabled: false,
+    permissions: [{ permission: 'NetworkConnect', justification: 'Open search results in your default browser' }],
+  },
+];
+
 // Simple agent intent detection for mock mode
 const AGENT_PATTERNS = [
   /^open\s+/i, /^launch\s+/i, /^start\s+/i, /^quit\s+/i, /^close\s+/i,
@@ -146,6 +155,36 @@ export const Bridge = {
       case 'hide_window':
         return true;
 
+      case 'list_extensions':
+        return MOCK_EXTENSIONS.map((e) => ({ ...e }));
+
+      case 'install_extension': {
+        const id = (args.path || '').split('/').filter(Boolean).pop() || `ext-${Date.now()}`;
+        if (!MOCK_EXTENSIONS.some((e) => e.id === id)) {
+          MOCK_EXTENSIONS.push({
+            id, name: id, version: '0.0.0', author: null, description: 'Installed (mock)',
+            kind: 'script', enabled: false, permissions: [],
+          });
+        }
+        return id;
+      }
+
+      case 'uninstall_extension':
+        MOCK_EXTENSIONS = MOCK_EXTENSIONS.filter((e) => e.id !== args.id);
+        return null;
+
+      case 'set_extension_enabled': {
+        const ext = MOCK_EXTENSIONS.find((e) => e.id === args.id);
+        if (ext) ext.enabled = !!args.enabled;
+        return null;
+      }
+
+      case 'query_extensions':
+        return [];
+
+      case 'execute_extension_action':
+        return null;
+
       case 'get_telemetry':
         mockUptime += 0.5;
         mockTicks += Math.floor(Math.random() * 3);
@@ -169,5 +208,19 @@ export const Bridge = {
       return window.__TAURI__.event.listen(event, callback);
     }
     return () => {};
+  },
+
+  /**
+   * Open a native folder picker, returning the selected path or null.
+   * Falls back to a prompt in browser-dev or if the dialog API is absent.
+   * @returns {Promise<string|null>}
+   */
+  async pickDirectory() {
+    if (IS_TAURI && window.__TAURI__.dialog?.open) {
+      const selected = await window.__TAURI__.dialog.open({ directory: true, multiple: false });
+      return typeof selected === 'string' ? selected : null;
+    }
+    const path = typeof prompt === 'function' ? prompt('Extension folder path:') : null;
+    return path && path.trim() ? path.trim() : null;
   },
 };

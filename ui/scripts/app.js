@@ -15,6 +15,7 @@ import * as Search from './search.js';
 import * as Keyboard from './keyboard.js';
 import * as Preview from './preview.js';
 import * as Agent from './agent.js';
+import * as Extensions from './extensions.js';
 
 /** @type {number} Currently selected result index */
 let selectedIndex = -1;
@@ -51,6 +52,7 @@ export function init() {
   // Initialize modules
   Preview.init(previewPanel);
   Agent.init(agentPanel);
+  Extensions.init();
   Keyboard.init();
 
   // Wire search input
@@ -79,6 +81,7 @@ export function init() {
   // Wire keyboard navigation
   Keyboard.registerCallbacks({
     onNavigate: (direction) => {
+      if (Extensions.isOpen()) return;
       if (currentResults.length === 0) return;
       selectedIndex = Math.max(0, Math.min(currentResults.length - 1, selectedIndex + direction));
       renderResults(resultsPanel);
@@ -89,6 +92,7 @@ export function init() {
     },
 
     onExecute: (withMeta) => {
+      if (Extensions.isOpen()) return;
       if (selectedIndex >= 0 && selectedIndex < currentResults.length) {
         const result = currentResults[selectedIndex];
         executeResult(result, withMeta, contentArea, agentPanel, modeBadge);
@@ -96,6 +100,11 @@ export function init() {
     },
 
     onDismiss: () => {
+      // The extension manager intercepts Esc first.
+      if (Extensions.isOpen()) {
+        Extensions.close();
+        return;
+      }
       if (agentMode) {
         // Exit agent mode first
         agentMode = false;
