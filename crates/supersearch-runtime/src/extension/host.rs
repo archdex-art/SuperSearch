@@ -5,6 +5,7 @@
 //! shell) and must print a JSON array of [`ExtensionResult`] to stdout. The
 //! process is killed if it exceeds [`SCRIPT_TIMEOUT`].
 
+use std::io::Read;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -66,10 +67,15 @@ pub fn run_query(dir: &Path, entrypoint: &str, query: &str) -> Result<Vec<Extens
 
     let mut child = cmd.spawn().map_err(|e| HostError::Spawn(e.to_string()))?;
 
+    // Poll for exit with a deadline, then read the child's pipes directly.
+    // Do NOT call `wait_with_output()` after `try_wait()` has already reaped the
+    // process — the second wait can intermittently fail with ECHILD ("No child
+    // processes"), which previously misreported a non-zero exit as a spawn error
+    // (a flaky test on loaded CI runners).
     let deadline = Instant::now() + SCRIPT_TIMEOUT;
-    let output = loop {
+    let status = loop {
         match child.try_wait() {
-            Ok(Some(_)) => break child.wait_with_output().map_err(|e| HostError::Spawn(e.to_string()))?,
+            Ok(Some(status)) => break status,
             Ok(None) => {
                 if Instant::now() >= deadline {
                     let _ = child.kill();
@@ -83,12 +89,20 @@ pub fn run_query(dir: &Path, entrypoint: &str, query: &str) -> Result<Vec<Extens
         }
     };
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(HostError::NonZeroExit(stderr));
+    // The process has exited, so its output sits in the pipe buffers; read it.
+    let mut stdout = String::new();
+    let mut stderr = String::new();
+    if let Some(mut out) = child.stdout.take() {
+        let _ = out.read_to_string(&mut stdout);
+    }
+    if let Some(mut err) = child.stderr.take() {
+        let _ = err.read_to_string(&mut stderr);
     }
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    if !status.success() {
+        return Err(HostError::NonZeroExit(stderr.trim().to_string()));
+    }
+
     let trimmed = stdout.trim();
     if trimmed.is_empty() {
         return Ok(Vec::new());
