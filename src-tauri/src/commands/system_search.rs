@@ -282,3 +282,24 @@ fn file_icon(filename: &str) -> String {
     }
     .into()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn system_commands_are_well_formed() {
+        let cmds = system_commands();
+        assert!(!cmds.is_empty(), "expected a non-empty system command catalog");
+        // Every command id is namespaced under `sys:` so execute_action routes it.
+        assert!(cmds.iter().all(|c| c.id.starts_with("sys:")), "all ids must be sys:");
+        // Ids are unique.
+        let mut ids: Vec<&str> = cmds.iter().map(|c| c.id.as_str()).collect();
+        let n = ids.len();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), n, "system command ids must be unique");
+        // Each has a human-readable title.
+        assert!(cmds.iter().all(|c| !c.title.is_empty()));
+    }
+}

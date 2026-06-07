@@ -120,3 +120,27 @@ fn validate_query(query: String) -> Result<String, String> {
     }
     Ok(trimmed.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_query_trims_and_accepts() {
+        assert_eq!(validate_query("  open chrome  ".into()).unwrap(), "open chrome");
+    }
+
+    #[test]
+    fn validate_query_rejects_empty_and_whitespace() {
+        assert!(validate_query("".into()).is_err());
+        assert!(validate_query("   ".into()).is_err());
+    }
+
+    #[test]
+    fn validate_query_rejects_oversized() {
+        let big = "x".repeat(MAX_QUERY_LEN + 1);
+        assert!(validate_query(big).is_err());
+        // Exactly at the limit is accepted.
+        assert!(validate_query("y".repeat(MAX_QUERY_LEN)).is_ok());
+    }
+}

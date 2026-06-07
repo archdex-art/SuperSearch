@@ -36,54 +36,9 @@ pub fn search_query(query: String, state: tauri::State<'_, AppState>) -> Vec<Sea
 
     let mut results = Vec::new();
 
-    // 1. Terminal commands
-    if q.starts_with('$') || q.starts_with("/terminal ") {
-        let cmd = if let Some(rest) = q.strip_prefix("$ ") {
-            rest
-        } else if let Some(rest) = q.strip_prefix('$') {
-            rest
-        } else {
-            &q[10..]
-        };
-
-        if !cmd.trim().is_empty() {
-            results.push(SearchResult {
-                id: format!("terminal:{}", cmd),
-                title: "Execute in Terminal".into(),
-                subtitle: cmd.to_string(),
-                category: "Command".into(),
-                icon: "💻".into(),
-                score: 2.0,
-            });
-            return results;
-        }
-    }
-
-    // 2. App commands (e.g. /chatgpt what is regression)
-    if q.starts_with('/') && !q.starts_with("/terminal") {
-        if let Some(space_idx) = q.find(' ') {
-            let raw_app_name = &q[1..space_idx];
-            let task = &q[space_idx + 1..];
-            if !raw_app_name.is_empty() && !task.trim().is_empty() {
-                let app_name = match raw_app_name.to_lowercase().as_str() {
-                    "chrome" => "Google Chrome",
-                    "brave" => "Brave Browser",
-                    "edge" => "Microsoft Edge",
-                    "safari" => "Safari",
-                    "firefox" => "Firefox",
-                    _ => raw_app_name,
-                };
-                results.push(SearchResult {
-                    id: format!("appcmd:{}|{}", app_name, task),
-                    title: format!("Execute in {}", app_name),
-                    subtitle: task.to_string(),
-                    category: "Command".into(),
-                    icon: "🤖".into(),
-                    score: 2.0,
-                });
-                return results;
-            }
-        }
+    // Prefix routing ($ / terminal / /app) short-circuits the rest.
+    if let Some(cmd) = command_prefix_result(q) {
+        return vec![cmd];
     }
 
     let q_lower = q.to_lowercase();
@@ -133,4 +88,82 @@ pub fn search_query(query: String, state: tauri::State<'_, AppState>) -> Vec<Sea
     results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
     results.truncate(12);
     results
+}
+
+/// Map a `$`/`/terminal`/`/app` prefixed query to its synthetic command result.
+/// Pure (no IPC/OS), so it is unit-testable. Returns `None` if not a command.
+fn command_prefix_result(q: &str) -> Option<SearchResult> {
+    // Terminal: "$ cmd", "$cmd", or "/terminal cmd".
+    if q.starts_with('$') || q.starts_with("/terminal ") {
+        let cmd = q
+            .strip_prefix("$ ")
+            .or_else(|| q.strip_prefix('$'))
+            .or_else(|| q.strip_prefix("/terminal "))
+            .unwrap_or("")
+            .trim();
+        if cmd.is_empty() {
+            return None;
+        }
+        return Some(SearchResult {
+            id: format!("terminal:{}", cmd),
+            title: "Execute in Terminal".into(),
+            subtitle: cmd.to_string(),
+            category: "Command".into(),
+            icon: "💻".into(),
+            score: 2.0,
+        });
+    }
+
+    // App command: "/app some task".
+    if q.starts_with('/') {
+        if let Some(space_idx) = q.find(' ') {
+            let raw = &q[1..space_idx];
+            let task = q[space_idx + 1..].trim();
+            if !raw.is_empty() && !task.is_empty() {
+                let app_name = match raw.to_lowercase().as_str() {
+                    "chrome" => "Google Chrome",
+                    "brave" => "Brave Browser",
+                    "edge" => "Microsoft Edge",
+                    "safari" => "Safari",
+                    "firefox" => "Firefox",
+                    _ => raw,
+                };
+                return Some(SearchResult {
+                    id: format!("appcmd:{}|{}", app_name, task),
+                    title: format!("Execute in {}", app_name),
+                    subtitle: task.to_string(),
+                    category: "Command".into(),
+                    icon: "🤖".into(),
+                    score: 2.0,
+                });
+            }
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn terminal_dollar_and_slash_forms() {
+        assert_eq!(command_prefix_result("$ ls -la").unwrap().id, "terminal:ls -la");
+        assert_eq!(command_prefix_result("$htop").unwrap().id, "terminal:htop");
+        assert_eq!(command_prefix_result("/terminal echo hi").unwrap().id, "terminal:echo hi");
+    }
+
+    #[test]
+    fn appcmd_aliases_and_passthrough() {
+        assert_eq!(command_prefix_result("/chrome open github").unwrap().id, "appcmd:Google Chrome|open github");
+        assert_eq!(command_prefix_result("/notes write a memo").unwrap().id, "appcmd:notes|write a memo");
+    }
+
+    #[test]
+    fn non_commands_return_none() {
+        assert!(command_prefix_result("hello world").is_none());
+        assert!(command_prefix_result("$").is_none());
+        assert!(command_prefix_result("$   ").is_none());
+        assert!(command_prefix_result("/app").is_none());
+    }
 }
