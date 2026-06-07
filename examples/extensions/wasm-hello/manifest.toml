@@ -1,0 +1,10 @@
+id = "wasm-hello"
+name = "WASM Hello"
+version = "1.0.0"
+author = "SuperSearch"
+description = "Sample sandboxed WebAssembly extension (no host permissions)"
+kind = "wasm"
+# wasmtime compiles WAT text directly, so this sample needs no build toolchain.
+# A real extension would ship a compiled plugin.wasm with the same ABI.
+entrypoint = "plugin.wat"
+keywords = ["wasm", "hello"]

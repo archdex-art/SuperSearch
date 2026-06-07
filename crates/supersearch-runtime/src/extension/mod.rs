@@ -15,6 +15,7 @@
 
 pub mod manifest;
 pub mod host;
+pub mod wasm;
 pub mod registry;
 
 pub use host::{ExtensionAction, ExtensionResult};

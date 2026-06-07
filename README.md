@@ -97,8 +97,10 @@ and an entrypoint, installed under
 Two execution models share one registry and (forthcoming) manager UI:
 - **Script extensions (available now):** the entrypoint is a native script run
   as a subprocess — argv, no shell, hard 10s timeout.
-- **WASM extensions (planned):** sandboxed `.wasm` modules for untrusted
-  third-party publishers; declared in manifests, not yet executed.
+- **WASM extensions:** sandboxed `.wasm` (or `.wat`) modules run via wasmtime
+  with fuel + memory limits. ABI: export `memory`, `alloc(i32)->i32`, and
+  `query(i32,i32)->i64` returning a packed pointer to a JSON result array. See
+  [`examples/extensions/wasm-hello/`](examples/extensions/wasm-hello/).
 
 **Capability-gated & consent-based.** Enabling an extension grants it a
 *revocable* capability token scoped to `plugin.<id>`, covering exactly the

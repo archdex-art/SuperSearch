@@ -23,6 +23,7 @@ use crate::capability::registry::CapabilityRegistry;
 use crate::capability::token::{CapabilityToken, Permission};
 
 use super::host::{self, ExtensionAction};
+use super::wasm;
 use super::manifest::{ExtensionKind, ExtensionManifest};
 
 /// A single installed extension and its runtime state.
@@ -227,19 +228,28 @@ impl ExtensionRegistry {
     /// each tagged with its source extension id.
     pub fn query(&self, input: &str) -> Vec<ExtensionQueryHit> {
         let input_lower = input.to_lowercase();
-        let targets: Vec<(String, PathBuf, String)> = {
+        let targets: Vec<(String, ExtensionKind, PathBuf, String)> = {
             let records = self.records.read();
             records
                 .iter()
-                .filter(|r| r.enabled && r.manifest.kind == ExtensionKind::Script)
+                .filter(|r| r.enabled)
                 .filter(|r| keyword_match(&r.manifest.keywords, &input_lower))
-                .map(|r| (r.manifest.id.clone(), r.dir.clone(), r.manifest.entrypoint.clone()))
+                .map(|r| (r.manifest.id.clone(), r.manifest.kind, r.dir.clone(), r.manifest.entrypoint.clone()))
                 .collect()
         };
 
         let mut hits = Vec::new();
-        for (id, dir, entrypoint) in targets {
-            match host::run_query(&dir, &entrypoint, input) {
+        for (id, kind, dir, entrypoint) in targets {
+            let outcome = match kind {
+                ExtensionKind::Script => host::run_query(&dir, &entrypoint, input),
+                ExtensionKind::Wasm => {
+                    wasm::run_query(&dir.join(&entrypoint), input).map_err(|e| {
+                        // Normalize to the host error type for uniform logging.
+                        super::host::HostError::BadOutput(e)
+                    })
+                }
+            };
+            match outcome {
                 Ok(results) => {
                     for r in results {
                         hits.push(ExtensionQueryHit {
