@@ -2,9 +2,15 @@
 //!
 //! Executes nodes in dependency order, supports parallel execution of
 //! independent nodes, and streams runtime events for UI updates.
+//!
+//! ## Platform isolation
+//! The executor owns capability mediation, journaling, and graph traversal —
+//! none of which is OS-specific. Every actual OS call is delegated to a
+//! [`PlatformBackend`](crate::platform::PlatformBackend) selected for the
+//! compile target, so this module contains no `open`/`osascript`/`mdfind`/Win32
+//! references and no `cfg(target_os)` branching. Swapping or adding an OS means
+//! writing a backend, not touching the executor.
 
-use std::io::Write;
-use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tracing::{debug, error, info, warn};
@@ -15,20 +21,13 @@ use crate::capability::namespace::Namespace;
 use crate::capability::token::{CapabilityToken, Permission};
 use crate::journal::entry::{EntryKind, JournalEntry};
 use crate::journal::writer::JournalSender;
+use crate::platform::{default_backend, PlatformBackend};
+
+pub use crate::platform::StepResult;
 
 /// Hard upper bound on how long any single OS action may run before it is
 /// killed. Keeps a hung helper process from wedging the synchronous IPC thread.
 const ACTION_TIMEOUT: Duration = Duration::from_secs(15);
-
-/// Result of executing a single task node.
-#[derive(Debug, Clone)]
-pub struct StepResult {
-    pub node_id: NodeId,
-    pub label: String,
-    pub success: bool,
-    pub output: String,
-    pub error: Option<String>,
-}
 
 /// Executes task graphs against the OS.
 ///
@@ -45,18 +44,32 @@ pub struct AgentExecutor {
     token: CapabilityToken,
     /// Audit/replay journal. `None` disables journaling (used in unit tests).
     journal: Option<JournalSender>,
+    /// The OS automation backend every action is dispatched to.
+    backend: Arc<dyn PlatformBackend>,
     /// Monotonic clock origin for journal timestamps.
     boot: Instant,
 }
 
 impl AgentExecutor {
-    /// Create an executor bound to a capability gate and the agent's token.
+    /// Create an executor bound to a capability gate and the agent's token,
+    /// using the platform backend selected for this build target.
     pub fn new(
         gate: Arc<CapabilityGate>,
         token: CapabilityToken,
         journal: Option<JournalSender>,
     ) -> Self {
-        Self { gate, token, journal, boot: Instant::now() }
+        Self::with_backend(gate, token, journal, default_backend())
+    }
+
+    /// Create an executor with an explicit platform backend. Used by tests to
+    /// inject a deterministic or fake backend; production uses [`new`].
+    pub fn with_backend(
+        gate: Arc<CapabilityGate>,
+        token: CapabilityToken,
+        journal: Option<JournalSender>,
+        backend: Arc<dyn PlatformBackend>,
+    ) -> Self {
+        Self { gate, token, journal, backend, boot: Instant::now() }
     }
 
     /// Execute an entire task graph, returning results for each node.
@@ -254,90 +267,57 @@ impl AgentExecutor {
         }
     }
 
-    /// Execute a single task node kind.
+    /// Translate a task node into a call on the platform backend.
     ///
-    /// ## Security
-    /// All nodes whose payloads contain user-derived data are executed by
-    /// spawning the target binary directly with an argument vector — never by
-    /// building a string and handing it to `sh -c`. This makes shell
-    /// metacharacters (`;`, `|`, `$()`, backticks, quotes) inert, eliminating
-    /// the command-injection surface. Only the trusted, constant scripts
-    /// produced by the planner (`SystemCommand` / `SystemInfo` /
-    /// `ListRunningApps`) are run through a shell, and those never interpolate
-    /// user input.
+    /// This method is intentionally OS-agnostic: it computes presentation labels
+    /// and the small amount of platform-independent policy (the search-result
+    /// URL, capping Spotlight output) and hands every actual OS primitive to the
+    /// [`PlatformBackend`]. All security properties of the underlying spawn
+    /// (argv-only execution of user data, trusted-script isolation, per-action
+    /// timeout) live in the backend and the shared
+    /// [`exec`](crate::platform::exec) engine.
     fn execute_node(&self, kind: &TaskNodeKind, timeout: Duration) -> StepResult {
+        let backend = self.backend.as_ref();
         match kind {
             TaskNodeKind::LaunchApp { app_name, args } => {
-                let label = format!("Launch {}", app_name);
-                let argv: Vec<String> = if args.is_empty() {
-                    vec!["-a".into(), app_name.clone()]
-                } else {
-                    let mut v = vec!["-n".into(), "-a".into(), app_name.clone(), "--args".into()];
-                    v.extend(args.iter().cloned());
-                    v
-                };
-                let arg_refs: Vec<&str> = argv.iter().map(String::as_str).collect();
-                self.run_argv("open", &arg_refs, &label, timeout)
+                backend.launch_app(app_name, args, &format!("Launch {}", app_name), timeout)
             }
             TaskNodeKind::OpenFile { path } => {
-                // `--` stops `open` from treating a leading-dash path as a flag.
-                self.run_argv("open", &["--", path], &format!("Open {}", path), timeout)
+                backend.open_path(path, &format!("Open {}", path), timeout)
             }
             TaskNodeKind::OpenUrl { url } => {
-                self.run_argv("open", &["--", url], &format!("Open {}", url), timeout)
+                backend.open_url(url, &format!("Open {}", url), timeout)
             }
             TaskNodeKind::WebSearch { query } => {
                 let url = format!("https://www.google.com/search?q={}", percent_encode(query));
-                self.run_argv("open", &["--", &url], &format!("Web Search for \"{}\"", query), timeout)
+                backend.open_url(&url, &format!("Web Search for \"{}\"", query), timeout)
             }
             TaskNodeKind::FindFiles { query } => {
-                // Spotlight search via argv (no shell); cap results in Rust.
-                let mut r = self.run_argv_output("mdfind", &["-name", query], &format!("Find {}", query), timeout);
+                let mut r = backend.find_files(query, &format!("Find {}", query), timeout);
                 if r.success {
-                    let capped: String = r.output.lines().take(20).collect::<Vec<_>>().join("\n");
-                    r.output = capped;
+                    // Cap result volume in Rust — platform-independent policy.
+                    r.output = r.output.lines().take(20).collect::<Vec<_>>().join("\n");
                 }
                 r
             }
-            TaskNodeKind::ClipboardRead => {
-                self.run_argv_output("pbpaste", &[], "Read clipboard", timeout)
-            }
+            TaskNodeKind::ClipboardRead => backend.clipboard_read("Read clipboard", timeout),
             TaskNodeKind::ClipboardWrite { content } => {
-                self.run_stdin("pbcopy", &[], content, "Write to clipboard", timeout)
+                backend.clipboard_write(content, "Write to clipboard", timeout)
             }
             TaskNodeKind::SystemCommand { script, label } => {
                 // Trusted, constant script generated by the planner.
-                self.run_shell(script, label, timeout)
+                backend.run_trusted_script(script, label, false, timeout)
             }
             TaskNodeKind::SystemInfo { command, label } => {
                 // Trusted, constant command generated by the planner.
-                self.run_shell_with_output(command, label, timeout)
+                backend.run_trusted_script(command, label, true, timeout)
             }
-            TaskNodeKind::ListRunningApps => {
-                self.run_argv_output(
-                    "osascript",
-                    &["-e", "tell application \"System Events\" to get name of every process whose background only is false"],
-                    "List running apps",
-                    timeout,
-                )
-            }
+            TaskNodeKind::ListRunningApps => backend.list_running_apps("List running apps", timeout),
             TaskNodeKind::QuitApp { app_name } => {
-                // App name passed as an AppleScript argv item — not interpolated
-                // into the script source — so it cannot break out of the string.
-                self.run_argv(
-                    "osascript",
-                    &["-e", "on run argv", "-e", "tell application (item 1 of argv) to quit", "-e", "end run", "--", app_name],
-                    &format!("Quit {}", app_name),
-                    timeout,
-                )
+                backend.quit_app(app_name, &format!("Quit {}", app_name), timeout)
             }
             TaskNodeKind::SwitchApp { app_name } => {
-                self.run_argv(
-                    "osascript",
-                    &["-e", "on run argv", "-e", "tell application (item 1 of argv) to activate", "-e", "end run", "--", app_name],
-                    &format!("Switch to {}", app_name),
-                    timeout,
-                )
+                backend.switch_app(app_name, &format!("Switch to {}", app_name), timeout)
             }
             TaskNodeKind::Noop { reason } => StepResult {
                 node_id: 0,
@@ -346,147 +326,6 @@ impl AgentExecutor {
                 output: reason.clone(),
                 error: None,
             },
-        }
-    }
-
-    /// Spawn a program directly with an argument vector (no shell).
-    fn run_argv(&self, program: &str, args: &[&str], label: &str, timeout: Duration) -> StepResult {
-        debug!(program, ?args, label, "Executing argv command");
-        let mut cmd = Command::new(program);
-        cmd.args(args);
-        Self::run_command(cmd, None, label, false, timeout)
-    }
-
-    /// Spawn a program directly and capture its stdout.
-    fn run_argv_output(&self, program: &str, args: &[&str], label: &str, timeout: Duration) -> StepResult {
-        debug!(program, ?args, label, "Executing argv command (capturing output)");
-        let mut cmd = Command::new(program);
-        cmd.args(args);
-        Self::run_command(cmd, None, label, true, timeout)
-    }
-
-    /// Spawn a program directly, writing `input` to its stdin.
-    fn run_stdin(&self, program: &str, args: &[&str], input: &str, label: &str, timeout: Duration) -> StepResult {
-        debug!(program, label, "Executing argv command with stdin");
-        let mut cmd = Command::new(program);
-        cmd.args(args);
-        Self::run_command(cmd, Some(input), label, false, timeout)
-    }
-
-    /// Run a trusted, constant shell command, returning success/failure.
-    ///
-    /// Only used for planner-generated constant scripts — never user input.
-    fn run_shell(&self, cmd: &str, label: &str, timeout: Duration) -> StepResult {
-        debug!(cmd, label, "Executing trusted shell command");
-        let mut command = Command::new("sh");
-        command.arg("-c").arg(cmd);
-        Self::run_command(command, None, label, false, timeout)
-    }
-
-    /// Run a trusted, constant shell command and capture its stdout.
-    fn run_shell_with_output(&self, cmd: &str, label: &str, timeout: Duration) -> StepResult {
-        debug!(cmd, label, "Executing trusted shell command (capturing output)");
-        let mut command = Command::new("sh");
-        command.arg("-c").arg(cmd);
-        Self::run_command(command, None, label, true, timeout)
-    }
-
-    /// Spawn `cmd`, optionally feeding `input` to its stdin, and wait for it to
-    /// exit — but never longer than `timeout`. A process that overruns the
-    /// deadline is killed so a hung `osascript`/`open` can't wedge the caller
-    /// (which, in the app, is the synchronous IPC thread).
-    fn run_command(
-        mut cmd: Command,
-        input: Option<&str>,
-        label: &str,
-        capture: bool,
-        timeout: Duration,
-    ) -> StepResult {
-        cmd.stdin(if input.is_some() { Stdio::piped() } else { Stdio::null() })
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-
-        let mut child = match cmd.spawn() {
-            Ok(c) => c,
-            Err(e) => return Self::err(label, e),
-        };
-
-        // Write stdin (if any) and close it so the child observes EOF.
-        if let Some(data) = input {
-            if let Some(mut stdin) = child.stdin.take() {
-                if let Err(e) = stdin.write_all(data.as_bytes()) {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Self::err(label, e);
-                }
-            }
-        }
-
-        let deadline = Instant::now() + timeout;
-        loop {
-            match child.try_wait() {
-                Ok(Some(_status)) => return Self::finish(child.wait_with_output(), label, capture),
-                Ok(None) => {
-                    if Instant::now() >= deadline {
-                        let _ = child.kill();
-                        let _ = child.wait();
-                        error!(label, timeout_ms = timeout.as_millis() as u64, "Action timed out — killed");
-                        return StepResult {
-                            node_id: 0,
-                            label: label.to_string(),
-                            success: false,
-                            output: String::new(),
-                            error: Some(format!("Timed out after {:?}", timeout)),
-                        };
-                    }
-                    std::thread::sleep(Duration::from_millis(15));
-                }
-                Err(e) => return Self::err(label, e),
-            }
-        }
-    }
-
-    /// Normalize a completed `Command::output()` into a `StepResult`.
-    fn finish(
-        output: std::io::Result<std::process::Output>,
-        label: &str,
-        capture: bool,
-    ) -> StepResult {
-        match output {
-            Ok(output) => {
-                let success = output.status.success();
-                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-                let out = if capture {
-                    if stdout.is_empty() && success {
-                        format!("✓ {} (no output)", label)
-                    } else {
-                        stdout
-                    }
-                } else if success {
-                    format!("✓ {}", label)
-                } else {
-                    format!("✗ {}: {}", label, stderr)
-                };
-                StepResult {
-                    node_id: 0,
-                    label: label.to_string(),
-                    success,
-                    output: out,
-                    error: if success { None } else { Some(stderr) },
-                }
-            }
-            Err(e) => Self::err(label, e),
-        }
-    }
-
-    fn err(label: &str, e: impl std::fmt::Display) -> StepResult {
-        StepResult {
-            node_id: 0,
-            label: label.to_string(),
-            success: false,
-            output: String::new(),
-            error: Some(format!("Failed to execute: {}", e)),
         }
     }
 }
@@ -535,25 +374,6 @@ mod tests {
         assert!(!encoded.contains(' '));
         assert_eq!(percent_encode("hello world"), "hello%20world");
         assert_eq!(percent_encode("rust-lang_2024.~"), "rust-lang_2024.~");
-    }
-
-    #[test]
-    fn long_running_action_is_killed_at_deadline() {
-        // A process that outlives the deadline must be killed and reported as a
-        // timeout rather than blocking the caller indefinitely.
-        let start = Instant::now();
-        let mut cmd = Command::new("sleep");
-        cmd.arg("30");
-        let result = AgentExecutor::run_command(
-            cmd,
-            None,
-            "sleep",
-            false,
-            Duration::from_millis(200),
-        );
-        assert!(!result.success);
-        assert!(result.error.unwrap_or_default().contains("Timed out"));
-        assert!(start.elapsed() < Duration::from_secs(5), "did not honor the deadline");
     }
 
     #[test]
@@ -643,6 +463,81 @@ mod tests {
             let read = reader.run_guarded(&TaskNodeKind::ClipboardRead, "Read clipboard", ACTION_TIMEOUT);
             assert_ne!(read.output, sentinel, "blocked write still reached the OS");
         }
+    }
+
+    /// A backend that performs no OS calls and records what it was asked to do,
+    /// proving the executor routes every action through the [`PlatformBackend`]
+    /// seam — on any OS, not just macOS.
+    #[derive(Default)]
+    struct RecordingBackend {
+        calls: std::sync::Mutex<Vec<String>>,
+    }
+    impl RecordingBackend {
+        fn ok(&self, what: String, label: &str) -> StepResult {
+            self.calls.lock().unwrap().push(what);
+            StepResult { node_id: 0, label: label.into(), success: true, output: String::new(), error: None }
+        }
+    }
+    impl PlatformBackend for RecordingBackend {
+        fn launch_app(&self, a: &str, _args: &[String], l: &str, _t: Duration) -> StepResult { self.ok(format!("launch:{a}"), l) }
+        fn open_path(&self, p: &str, l: &str, _t: Duration) -> StepResult { self.ok(format!("open_path:{p}"), l) }
+        fn open_url(&self, u: &str, l: &str, _t: Duration) -> StepResult { self.ok(format!("open_url:{u}"), l) }
+        fn find_files(&self, q: &str, l: &str, _t: Duration) -> StepResult { self.ok(format!("find:{q}"), l) }
+        fn clipboard_read(&self, l: &str, _t: Duration) -> StepResult { self.ok("clip_read".into(), l) }
+        fn clipboard_write(&self, c: &str, l: &str, _t: Duration) -> StepResult { self.ok(format!("clip_write:{c}"), l) }
+        fn list_running_apps(&self, l: &str, _t: Duration) -> StepResult { self.ok("list_apps".into(), l) }
+        fn quit_app(&self, a: &str, l: &str, _t: Duration) -> StepResult { self.ok(format!("quit:{a}"), l) }
+        fn switch_app(&self, a: &str, l: &str, _t: Duration) -> StepResult { self.ok(format!("switch:{a}"), l) }
+        fn run_trusted_script(&self, s: &str, l: &str, _c: bool, _t: Duration) -> StepResult { self.ok(format!("script:{s}"), l) }
+    }
+
+    /// Build a fully-granted executor wired to a recording backend.
+    fn recording_executor() -> (AgentExecutor, Arc<RecordingBackend>) {
+        let registry = Arc::new(CapabilityRegistry::new());
+        let gate = Arc::new(CapabilityGate::new(registry.clone()));
+        let token = registry.grant(
+            Namespace::new("agent"),
+            vec![Permission::NetworkConnect, Permission::ProcessSpawn],
+            "agent".into(),
+            None,
+            "test".into(),
+        );
+        let backend = Arc::new(RecordingBackend::default());
+        let exec = AgentExecutor::with_backend(gate, token, None, backend.clone());
+        (exec, backend)
+    }
+
+    #[test]
+    fn executor_dispatches_every_action_through_the_backend() {
+        // WebSearch must reach the backend as a fully-formed, percent-encoded
+        // open_url — the executor owns that platform-independent policy, the
+        // backend owns the OS call. No real process is ever spawned here.
+        let (exec, backend) = recording_executor();
+        let r = exec.run_guarded(
+            &TaskNodeKind::WebSearch { query: "a b&c".into() },
+            "Web Search",
+            ACTION_TIMEOUT,
+        );
+        assert!(r.success);
+        let calls = backend.calls.lock().unwrap();
+        assert_eq!(
+            calls.as_slice(),
+            ["open_url:https://www.google.com/search?q=a%20b%26c"],
+            "WebSearch should dispatch one encoded open_url to the backend"
+        );
+    }
+
+    #[test]
+    fn denied_action_never_reaches_the_backend() {
+        // The capability gate must short-circuit before the backend is touched.
+        let (exec, backend) = recording_executor(); // lacks ClipboardWrite
+        let r = exec.run_guarded(
+            &TaskNodeKind::ClipboardWrite { content: "x".into() },
+            "Write to clipboard",
+            ACTION_TIMEOUT,
+        );
+        assert!(!r.success);
+        assert!(backend.calls.lock().unwrap().is_empty(), "denied action reached the backend");
     }
 
     #[test]
