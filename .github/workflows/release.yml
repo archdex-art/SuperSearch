@@ -70,23 +70,15 @@ jobs:
       - name: Install frontend dependencies
         run: npm --prefix react-command-palette ci
 
-      - name: Build, sign & publish
+      - name: Build & publish
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # ── macOS: Apple Developer ID code signing ────────────────────
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          # ── macOS: Notarization ───────────────────────────────────────
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # ── Windows: code signing (optional) ─────────────────────────
-          # Set WINDOWS_CERTIFICATE + WINDOWS_CERTIFICATE_PASSWORD to enable.
-          # ── Updater artifact signing ──────────────────────────────────
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Builds are UNSIGNED. Do not wire empty signing secrets here: passing
+          # an empty `APPLE_CERTIFICATE` makes tauri-action attempt (and fail) a
+          # keychain cert import on macOS. To enable signing, add the Apple
+          # Developer / Windows / updater secrets *and* their env vars back per
+          # RELEASING.md — only when the secrets actually exist.
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "SuperSearch ${{ github.ref_name }}"
