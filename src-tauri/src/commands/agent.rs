@@ -2,8 +2,12 @@
 //!
 //! Exposes the agent pipeline to the frontend via Tauri commands.
 
+use std::time::Duration;
+
 use serde::Serialize;
 use tauri::command;
+
+use supersearch_runtime::scheduler::PriorityClass;
 
 use crate::state::AppState;
 
@@ -49,8 +53,27 @@ pub async fn agent_query(
     let query = validate_query(query)?;
     let agent = state.agent.clone();
 
-    let response = tokio::task::spawn_blocking(move || agent.process_query(&query))
+    // Run the agent *through the scheduler*: enqueue an Interactive task that
+    // the kernel's scheduler loop drives (so agent work is scheduled,
+    // prioritized, and observable in telemetry). The blocking OS pipeline runs
+    // on a blocking thread; the result returns over a oneshot channel.
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let task = state
+        .queue
+        .builder(PriorityClass::Interactive)
+        .origin("ipc")
+        .label("agent_query")
+        .spawn(async move {
+            let result = tokio::task::spawn_blocking(move || agent.process_query(&query)).await;
+            let _ = tx.send(result);
+        });
+    state.queue.enqueue(task);
+
+    // Bound the overall wait; the agent's per-action timeouts cap each step.
+    let response = tokio::time::timeout(Duration::from_secs(60), rx)
         .await
+        .map_err(|_| "Agent query timed out".to_string())?
+        .map_err(|_| "Agent task was dropped".to_string())?
         .map_err(|e| format!("Agent task failed: {e}"))?;
 
     Ok(AgentQueryResponse {

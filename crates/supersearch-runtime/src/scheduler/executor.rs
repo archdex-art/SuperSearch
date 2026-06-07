@@ -352,4 +352,40 @@ mod tests {
         executor.run().await;
         assert!(completed.load(std::sync::atomic::Ordering::SeqCst));
     }
+
+    #[tokio::test]
+    async fn scheduler_drives_task_with_awaited_inner_future() {
+        // Mirrors how agent_query is scheduled (P5): an enqueued task that
+        // awaits an inner spawn_blocking and returns its result over a oneshot.
+        // Proves the scheduler polls the future to completion across the await.
+        let queue = Arc::new(MultiQueue::new());
+        let supervisor = Supervisor::new("test", SupervisorStrategy::OneForOne);
+        let mut executor = SchedulerExecutor::new(
+            queue.clone(), SchedulerConfig::default(), supervisor, Arc::new(NoopFastPathSink),
+        );
+
+        let (tx, rx) = tokio::sync::oneshot::channel::<u32>();
+        let task = queue
+            .builder(PriorityClass::Interactive)
+            .origin("test")
+            .label("inner")
+            .spawn(async move {
+                let v = tokio::task::spawn_blocking(|| 21u32 * 2).await.unwrap();
+                let _ = tx.send(v);
+            });
+        queue.enqueue(task);
+
+        let sq = queue.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            sq.shutdown();
+        });
+        executor.run().await;
+
+        let got = tokio::time::timeout(Duration::from_secs(2), rx)
+            .await
+            .expect("scheduler did not drive the task in time")
+            .expect("task dropped its sender");
+        assert_eq!(got, 42);
+    }
 }
