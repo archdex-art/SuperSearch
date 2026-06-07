@@ -145,6 +145,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             commands::actions::execute_action,
@@ -162,6 +163,7 @@ pub fn run() {
             commands::settings::get_settings,
             commands::settings::update_settings,
             commands::journal::get_journal_summary,
+            commands::updater::check_for_updates,
         ])
         // Spotlight-style dismiss: hide the palette when it loses focus
         // (e.g. the user clicks another app), if enabled in settings.
