@@ -14,10 +14,8 @@
 //! data are inert. The `run_shell*` helpers exist only for the trusted constant
 //! scripts the planner emits — they never interpolate user input.
 //!
-//! On macOS-only CI this whole module is exercised; on other targets the macOS
-//! backend is compiled out and these helpers are dead until a backend for that
-//! OS is written, hence the targeted `allow(dead_code)`.
-#![cfg_attr(not(target_os = "macos"), allow(dead_code))]
+//! Every platform backend is compiled on every target, so these helpers are
+//! always referenced and never dead regardless of which backend is selected.
 
 use std::io::Write;
 use std::process::{Command, Stdio};

@@ -8,10 +8,13 @@
 //! uniform, auditable "not supported on this platform" failure that the
 //! capability gate and journal record like any other outcome.
 //!
-//! Adding Windows or Linux support means writing a sibling module that
-//! implements [`PlatformBackend`] and selecting it in
+//! macOS and Linux now have real backends; this covers every *other* target
+//! (e.g. Windows) until one is written. Adding support means a sibling module
+//! that implements [`PlatformBackend`] and one arm in
 //! [`default_backend`](super::default_backend) — nothing in the executor, the
-//! capability gate, or the journal changes.
+//! capability gate, or the journal changes. Compiled everywhere but only
+//! selected off macOS/Linux, hence the module-level `allow`.
+#![cfg_attr(any(target_os = "macos", target_os = "linux"), allow(dead_code))]
 
 use std::time::Duration;
 

@@ -11,7 +11,7 @@ env:
 
 jobs:
   build-test:
-    name: Build, test & lint
+    name: Build, test & lint (macOS)
     # macOS runner: SuperSearch depends on `open`/`osascript`/`mdfind`/`pbcopy`,
     # and several tests exercise real macOS automation binaries.
     runs-on: macos-latest
@@ -42,3 +42,31 @@ jobs:
 
       - name: Test
         run: cargo test --workspace --verbose
+
+  linux-runtime:
+    name: Runtime build, test & lint (Linux)
+    # Verifies the runtime kernel + Platform Abstraction Layer (incl. the Linux
+    # backend selection) actually build and pass on real Linux. Scoped to the
+    # `supersearch-runtime` crate: the Tauri host (`src-tauri`) additionally
+    # needs GTK/WebKit system deps and a host-layer migration off direct
+    # macOS calls before it builds here — tracked as follow-up.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@v2
+
+      - name: Clippy (deny warnings)
+        run: cargo clippy -p supersearch-runtime --all-targets -- -D warnings
+
+      - name: Build
+        run: cargo build -p supersearch-runtime --verbose
+
+      - name: Test
+        run: cargo test -p supersearch-runtime --verbose

@@ -8,7 +8,10 @@
 //! interpolated into a shell string or script source, so shell/AppleScript
 //! metacharacters are inert.
 //!
-//! This is the only module in the runtime that knows these tool names exist.
+//! This is the only module in the runtime that knows these macOS tool names
+//! exist. It is compiled on every target but only *selected* on macOS; on other
+//! hosts it is the inactive alternative, hence the module-level `allow`.
+#![cfg_attr(not(target_os = "macos"), allow(dead_code))]
 
 use std::time::Duration;
 

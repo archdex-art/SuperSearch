@@ -11,15 +11,16 @@
 //! one backend is selected at startup by [`default_backend`] from the compile
 //! target:
 //!
-//! - **macOS** → [`macos::MacosBackend`], implemented today.
+//! - **macOS** → [`macos::MacosBackend`].
+//! - **Linux** → [`linux::LinuxBackend`].
 //! - **everything else** → [`unsupported::UnsupportedBackend`], which fails
 //!   every operation with a clear, auditable error rather than silently doing
 //!   nothing.
 //!
-//! A future Windows or Linux port is a new module implementing this same trait
-//! plus one arm in [`default_backend`] — the executor, the capability gate, and
-//! the journal are untouched. All backends spawn processes through one shared
-//! engine ([`exec`]) so spawn, timeout, and result-normalization semantics are
+//! A future Windows port is a new module implementing this same trait plus one
+//! arm in [`default_backend`] — the executor, the capability gate, and the
+//! journal are untouched. All backends spawn processes through one shared engine
+//! ([`exec`]) so spawn, timeout, and result-normalization semantics are
 //! identical on every OS, as the cross-platform execution contract requires.
 
 use std::sync::Arc;
@@ -27,9 +28,13 @@ use std::time::Duration;
 
 pub(crate) mod exec;
 
-#[cfg(target_os = "macos")]
+// All backends compile on every target (they are portable process-spawn logic),
+// which keeps each backend's command construction unit-testable on any host.
+// Exactly one is *selected* per target by `default_backend`; on the platforms
+// where a backend is the inactive alternative it carries a targeted
+// `allow(dead_code)`.
 mod macos;
-#[cfg(not(target_os = "macos"))]
+mod linux;
 mod unsupported;
 
 /// Result of executing a single OS automation primitive.
@@ -79,15 +84,19 @@ pub trait PlatformBackend: Send + Sync {
 
 /// Select the platform backend for the current compile target.
 ///
-/// macOS is implemented; every other target gets a backend that fails each
-/// operation with a clear error, so the runtime compiles and behaves
+/// macOS and Linux are implemented; every other target gets a backend that
+/// fails each operation with a clear error, so the runtime compiles and behaves
 /// deterministically everywhere even before a native port exists.
 pub fn default_backend() -> Arc<dyn PlatformBackend> {
     #[cfg(target_os = "macos")]
     {
         Arc::new(macos::MacosBackend::new())
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    {
+        Arc::new(linux::LinuxBackend::new())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         Arc::new(unsupported::UnsupportedBackend::new())
     }
