@@ -182,8 +182,16 @@ export const Bridge = {
         return null;
       }
 
-      case 'query_extensions':
-        return [];
+      case 'query_extensions': {
+        const q = (args.query || '').trim();
+        if (!q) return [];
+        return MOCK_EXTENSIONS.filter((e) => e.enabled).map((e) => ({
+          extension_id: e.id,
+          title: `${e.name}: ${q}`,
+          subtitle: 'Extension result (mock)',
+          action: { type: 'open_url', url: `https://duckduckgo.com/?q=${encodeURIComponent(q)}` },
+        }));
+      }
 
       case 'execute_extension_action':
         return null;

@@ -10,7 +10,7 @@ use std::sync::Arc;
 use tauri::command;
 
 use supersearch_runtime::extension::{
-    ExtensionAction, ExtensionInfo, ExtensionRegistry, ExtensionResult,
+    ExtensionAction, ExtensionInfo, ExtensionQueryHit, ExtensionRegistry,
 };
 
 /// List all installed extensions (for the manager UI).
@@ -48,12 +48,13 @@ pub fn set_extension_enabled(
     registry.set_enabled(&id, enabled).map_err(|e| e.to_string())
 }
 
-/// Run a query against all enabled script extensions and return merged results.
+/// Run a query against all enabled script extensions and return merged results,
+/// each tagged with its source extension id (for action routing).
 #[command]
 pub fn query_extensions(
     query: String,
     registry: tauri::State<'_, Arc<ExtensionRegistry>>,
-) -> Vec<ExtensionResult> {
+) -> Vec<ExtensionQueryHit> {
     registry.query(&query)
 }
 

@@ -22,7 +22,7 @@ use crate::capability::namespace::Namespace;
 use crate::capability::registry::CapabilityRegistry;
 use crate::capability::token::{CapabilityToken, Permission};
 
-use super::host::{self, ExtensionAction, ExtensionResult};
+use super::host::{self, ExtensionAction};
 use super::manifest::{ExtensionKind, ExtensionManifest};
 
 /// A single installed extension and its runtime state.
@@ -52,6 +52,16 @@ pub struct ExtensionInfo {
 pub struct PermissionInfo {
     pub permission: String,
     pub justification: String,
+}
+
+/// A single result row from `query`, tagged with the extension that produced it
+/// so the caller can route its action back to the right capability token.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtensionQueryHit {
+    pub extension_id: String,
+    pub title: String,
+    pub subtitle: String,
+    pub action: Option<ExtensionAction>,
 }
 
 /// Errors from registry operations.
@@ -213,27 +223,37 @@ impl ExtensionRegistry {
         Ok(())
     }
 
-    /// Fan a query out to enabled script extensions and collect their results.
-    pub fn query(&self, input: &str) -> Vec<ExtensionResult> {
+    /// Fan a query out to enabled script extensions and collect their results,
+    /// each tagged with its source extension id.
+    pub fn query(&self, input: &str) -> Vec<ExtensionQueryHit> {
         let input_lower = input.to_lowercase();
-        let targets: Vec<(PathBuf, String)> = {
+        let targets: Vec<(String, PathBuf, String)> = {
             let records = self.records.read();
             records
                 .iter()
                 .filter(|r| r.enabled && r.manifest.kind == ExtensionKind::Script)
                 .filter(|r| keyword_match(&r.manifest.keywords, &input_lower))
-                .map(|r| (r.dir.clone(), r.manifest.entrypoint.clone()))
+                .map(|r| (r.manifest.id.clone(), r.dir.clone(), r.manifest.entrypoint.clone()))
                 .collect()
         };
 
-        let mut results = Vec::new();
-        for (dir, entrypoint) in targets {
+        let mut hits = Vec::new();
+        for (id, dir, entrypoint) in targets {
             match host::run_query(&dir, &entrypoint, input) {
-                Ok(mut r) => results.append(&mut r),
-                Err(e) => warn!(dir = %dir.display(), error = %e, "Extension query failed"),
+                Ok(results) => {
+                    for r in results {
+                        hits.push(ExtensionQueryHit {
+                            extension_id: id.clone(),
+                            title: r.title,
+                            subtitle: r.subtitle,
+                            action: r.action,
+                        });
+                    }
+                }
+                Err(e) => warn!(id, dir = %dir.display(), error = %e, "Extension query failed"),
             }
         }
-        results
+        hits
     }
 
     /// Execute an extension result-action, mediated by the extension's token.

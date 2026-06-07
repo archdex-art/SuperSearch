@@ -168,6 +168,20 @@ export function init() {
  */
 async function executeResult(result, withMeta, contentArea, agentPanel, modeBadge) {
   try {
+    if (result._ext) {
+      // Extension result — run its action through the gate-checked IPC. If it
+      // has no action, there's nothing to execute (informational row).
+      if (result._ext.action) {
+        const execution = await Bridge.invoke('execute_extension_action', {
+          id: result._ext.id,
+          action: result._ext.action,
+        });
+        Preview.renderExecution(execution || {
+          title: result.title, category: 'Extension', detail: '✓ Done', backend: `ext:${result._ext.id}`,
+        });
+      }
+      return;
+    }
     if (result.id.startsWith('agent:')) {
       // Switch to agent mode
       agentMode = true;

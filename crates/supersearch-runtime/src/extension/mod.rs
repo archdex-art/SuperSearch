@@ -19,4 +19,6 @@ pub mod registry;
 
 pub use host::{ExtensionAction, ExtensionResult};
 pub use manifest::{ExtensionKind, ExtensionManifest};
-pub use registry::{ExtensionError, ExtensionInfo, ExtensionRegistry, PermissionInfo};
+pub use registry::{
+    ExtensionError, ExtensionInfo, ExtensionQueryHit, ExtensionRegistry, PermissionInfo,
+};
