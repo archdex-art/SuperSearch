@@ -48,3 +48,10 @@ Icon
 *~
 .gemini/
 .fleet/
+
+# ----------------------------------------------------------------------
+# AI project analysis viewer
+# ----------------------------------------------------------------------
+# Local AI memory / analysis cache / progress-tracking metadata.
+# Non-production artifact — never commit unless explicitly requested.
+/project_viewer
