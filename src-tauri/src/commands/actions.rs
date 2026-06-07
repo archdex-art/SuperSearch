@@ -241,11 +241,13 @@ fn execute_sys_command(action_id: &str) -> Result<ExecuteActionResponse, String>
 
 fn sys_lock(action_id: &str) -> Result<ExecuteActionResponse, String> {
     #[cfg(target_os = "macos")]
-    return execute_argv(
-        "osascript",
-        &["-e", r#"tell application "System Events" to keystroke "q" using {command down, control down}"#],
-        action_id, "Lock Screen", "System",
-    );
+    // `pmset displaysleepnow` sleeps the display immediately and needs NO
+    // Accessibility permission — unlike a synthesized Ctrl+Cmd+Q keystroke,
+    // which silently fails until the app is trusted. With the default "require
+    // password after sleep" Lock Screen setting (on for most users) this locks
+    // the Mac. (The classic `CGSession -suspend` binary was removed in recent
+    // macOS, so it is no longer a reliable target.)
+    return execute_argv("pmset", &["displaysleepnow"], action_id, "Lock Screen", "System");
     #[cfg(target_os = "linux")]
     return execute_argv("loginctl", &["lock-session"], action_id, "Lock Screen", "System");
     #[cfg(target_os = "windows")]
@@ -260,11 +262,14 @@ fn sys_lock(action_id: &str) -> Result<ExecuteActionResponse, String> {
 
 fn sys_screenshot(action_id: &str) -> Result<ExecuteActionResponse, String> {
     #[cfg(target_os = "macos")]
-    return execute_argv(
-        "screencapture",
-        &["-i", "~/Desktop/screenshot.png"],
-        action_id, "Screenshot", "System",
-    );
+    {
+        // `~` is NOT expanded in an argv arg (no shell), so resolve $HOME here —
+        // otherwise the capture lands in a literal "~/Desktop" folder, not the
+        // real Desktop.
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let path = format!("{}/Desktop/screenshot.png", home);
+        return execute_argv("screencapture", &["-i", path.as_str()], action_id, "Screenshot", "System");
+    }
     #[cfg(target_os = "linux")]
     {
         // Try gnome-screenshot, fall back to scrot.
@@ -503,7 +508,7 @@ fn send_app_command(app_name: &str, task: &str, action_id: &str) -> Result<Execu
             "-e", "if not wasRunning then",
             "-e", "delay 2.5",
             "-e", "else",
-            "-e", "delay 0.5",
+            "-e", "delay 1.0",
             "-e", "end if",
             "-e", "tell application \"System Events\" to keystroke taskText",
             "-e", "tell application \"System Events\" to key code 36",

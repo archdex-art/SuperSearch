@@ -90,6 +90,63 @@ fn enable_fullscreen_overlay(window: &tauri::WebviewWindow) {
     }
 }
 
+/// Ask macOS to trust this app for **Accessibility** (synthetic keystrokes).
+///
+/// Keystroke-based actions — app commands (`/chatgpt …`), and any System Events
+/// `keystroke`/`key code` — are silently dropped until the app is listed and
+/// enabled under *System Settings → Privacy & Security → Accessibility*. Calling
+/// `AXIsProcessTrustedWithOptions` with the prompt option posts the system grant
+/// dialog on first run and registers the app in that list. (Returns the current
+/// trust state; the user must still flip the toggle, after which keystrokes work.)
+#[cfg(target_os = "macos")]
+fn request_accessibility() {
+    use std::ffi::c_void;
+    use std::ptr;
+
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXIsProcessTrustedWithOptions(options: *const c_void) -> bool;
+        static kAXTrustedCheckOptionPrompt: *const c_void; // CFStringRef
+    }
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        static kCFBooleanTrue: *const c_void; // CFBooleanRef
+        static kCFTypeDictionaryKeyCallBacks: c_void;
+        static kCFTypeDictionaryValueCallBacks: c_void;
+        fn CFDictionaryCreate(
+            allocator: *const c_void,
+            keys: *const *const c_void,
+            values: *const *const c_void,
+            num_values: isize,
+            key_callbacks: *const c_void,
+            value_callbacks: *const c_void,
+        ) -> *const c_void;
+        fn CFRelease(cf: *const c_void);
+    }
+
+    // SAFETY: standard CoreFoundation/Accessibility FFI. We build a 1-entry
+    // options dict { kAXTrustedCheckOptionPrompt: true } with the type-aware
+    // CF callbacks, pass it to the trust check, then release the dict. All
+    // pointers come from framework symbols or `CFDictionaryCreate`.
+    unsafe {
+        let keys = [kAXTrustedCheckOptionPrompt];
+        let values = [kCFBooleanTrue];
+        let options = CFDictionaryCreate(
+            ptr::null(),
+            keys.as_ptr(),
+            values.as_ptr(),
+            1,
+            &kCFTypeDictionaryKeyCallBacks as *const _,
+            &kCFTypeDictionaryValueCallBacks as *const _,
+        );
+        let trusted = AXIsProcessTrustedWithOptions(options);
+        if !options.is_null() {
+            CFRelease(options);
+        }
+        info!(trusted, "macOS Accessibility trust state");
+    }
+}
+
 #[cfg(not(target_os = "macos"))]
 fn enable_fullscreen_overlay(_window: &tauri::WebviewWindow) {}
 
@@ -225,12 +282,13 @@ pub fn run() {
             {
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-                // Trigger macOS Accessibility permission prompt early.
-                info!("Requesting macOS accessibility permissions if not granted...");
-                let _ = std::process::Command::new("osascript")
-                    .arg("-e")
-                    .arg("tell application \"System Events\" to get name of every process")
-                    .output();
+                // Request the *Accessibility* permission keystroke synthesis
+                // needs (app commands, lock via keystroke, etc.). The old
+                // `osascript … get name of every process` only prompted for
+                // Automation — the wrong permission — so keystrokes stayed
+                // silently blocked.
+                info!("Checking macOS Accessibility trust (prompts on first run)...");
+                request_accessibility();
             }
 
             let handle = app.handle().clone();
