@@ -8,8 +8,9 @@ releases. Without them, `git tag vX.Y.Z && git push --tags` still produces an
 ## 0. What's already done
 - macOS bundle config (`tauri.conf.json`): icons (`icon.icns` + PNGs), category,
   copyright, `app`+`dmg` targets.
-- Updater plugin registered; `check_for_updates` IPC command; `updater:default`
-  capability.
+- Updater plugin registered (behind the `updater` feature); `check_for_updates`
+  IPC command. No `updater:default` WebView capability is needed — the check
+  runs Rust-side via `UpdaterExt`, not the JS plugin API.
 - Release workflow that builds on tag and publishes a draft GitHub Release,
   signing/notarizing automatically **if** the secrets are present.
 
