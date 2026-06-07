@@ -4,7 +4,10 @@
   "version": "0.1.0",
   "identifier": "com.supersearch.app",
   "build": {
-    "frontendDist": "../ui"
+    "frontendDist": "../react-command-palette/dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm --prefix ../react-command-palette run dev",
+    "beforeBuildCommand": "npm --prefix ../react-command-palette run build"
   },
   "app": {
     "withGlobalTauri": true,
