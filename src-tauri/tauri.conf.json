@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "../react-command-palette/dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "npm --prefix react-command-palette run dev",
-    "beforeBuildCommand": "npm --prefix react-command-palette run build"
+    "beforeDevCommand": { "cwd": "../react-command-palette", "script": "npm run dev" },
+    "beforeBuildCommand": { "cwd": "../react-command-palette", "script": "npm run build" }
   },
   "app": {
     "withGlobalTauri": true,
