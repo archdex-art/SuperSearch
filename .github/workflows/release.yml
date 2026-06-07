@@ -23,13 +23,13 @@ jobs:
             bundles: app,dmg
             rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
 
-          # ── Linux x86-64 — .deb + AppImage ──────────────────────────────
+          # ── Linux x86-64 — .deb (Debian/Ubuntu) ─────────────────────────
           - platform: ubuntu-22.04
             args: ""
-            bundles: deb,appimage
+            bundles: deb
             rust_targets: ""
 
-          # ── Windows x86-64 — NSIS installer ─────────────────────────────
+          # ── Windows x86-64 — NSIS .exe installer + .msi ─────────────────
           - platform: windows-latest
             args: ""
             bundles: nsis,msi
