@@ -186,8 +186,19 @@ mod tests {
         // A process that outlives the deadline must be killed and reported as a
         // timeout rather than blocking the caller indefinitely.
         let start = Instant::now();
-        let mut cmd = Command::new("sleep");
-        cmd.arg("30");
+        // A long-running child, spelled per-OS (no `sleep` binary on Windows).
+        #[cfg(not(windows))]
+        let cmd = {
+            let mut c = Command::new("sleep");
+            c.arg("30");
+            c
+        };
+        #[cfg(windows)]
+        let cmd = {
+            let mut c = Command::new("powershell");
+            c.args(["-NoProfile", "-Command", "Start-Sleep -Seconds 30"]);
+            c
+        };
         let result = run_command(cmd, None, "sleep", false, Duration::from_millis(200));
         assert!(!result.success);
         assert!(result.error.unwrap_or_default().contains("Timed out"));

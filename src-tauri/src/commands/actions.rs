@@ -519,7 +519,7 @@ fn send_app_command(app_name: &str, task: &str, action_id: &str) -> Result<Execu
         // Keystroke injection into arbitrary apps requires platform-specific
         // accessibility APIs (AppleScript on macOS, AT-SPI on Linux, UIAutomation
         // on Windows). Only macOS is wired up today.
-        let _ = (app_name, task);
+        let _ = (app_name, task, action_id);
         Err(format!(
             "appcmd: keystroke injection into '{}' is only supported on macOS",
             app_name
