@@ -142,10 +142,9 @@ pub fn run() {
     let app_state = AppState::from_kernel(&kernel, boot_ms);
 
     // 4. Build the Tauri app.
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             commands::actions::execute_action,
@@ -164,7 +163,16 @@ pub fn run() {
             commands::settings::update_settings,
             commands::journal::get_journal_summary,
             commands::updater::check_for_updates,
-        ])
+        ]);
+
+    // Auto-update is opt-in (off by default). The updater plugin eagerly
+    // requires `plugins.updater.pubkey`, so registering it without signing keys
+    // would crash boot. Release builds enable it with `--features updater`
+    // after generating keys (see RELEASING.md).
+    #[cfg(feature = "updater")]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+
+    builder
         // Spotlight-style dismiss: hide the palette when it loses focus
         // (e.g. the user clicks another app), if enabled in settings.
         .on_window_event(|window, event| {

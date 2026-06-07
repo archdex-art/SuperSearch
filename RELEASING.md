@@ -35,6 +35,10 @@ Add these as **GitHub repo secrets** (Settings → Secrets → Actions):
 No Team ID is hardcoded anywhere — signing activates purely from these secrets.
 
 ## 3. Auto-update (GitHub Releases channel)
+Auto-update is behind the **`updater` Cargo feature** (off by default) because
+the updater plugin refuses to start without `plugins.updater.pubkey`. Enabling
+it is: generate keys → add the config → build with `--features updater`.
+
 1. Generate an updater keypair:
    ```bash
    cargo tauri signer generate -w ~/.tauri/supersearch.key
@@ -53,8 +57,13 @@ No Team ID is hardcoded anywhere — signing activates purely from these secrets
      }
    }
    ```
-   (Until `pubkey` is set, `check_for_updates` returns "Updater not configured" —
-   the app still runs normally.)
+4. Build release artifacts with the feature enabled, e.g. add `--features
+   updater` to the release workflow's `args:` (or `cargo tauri build
+   --features updater` locally).
+
+   (Without the feature, `check_for_updates` reports "compiled without
+   auto-update support" and the app runs normally — the default `cargo tauri
+   dev` build does **not** register the updater, so it boots without keys.)
 
 ## 4. Cut a release
 ```bash
