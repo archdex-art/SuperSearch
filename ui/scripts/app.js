@@ -24,8 +24,8 @@ let selectedIndex = -1;
 /** @type {SearchResult[]} Current results */
 let currentResults = [];
 
-/** @type {boolean} Whether the preview panel is visible */
-let previewVisible = true;
+/** @type {boolean} Whether the preview panel is visible (off by default — Raycast-style full-width results) */
+let previewVisible = false;
 
 /** @type {number|null} Telemetry polling interval */
 let telemetryInterval = null;
@@ -49,6 +49,10 @@ export function init() {
     console.error('[App] Required DOM elements not found');
     return;
   }
+
+  // Raycast-style full-width single column by default; Tab reveals the preview.
+  contentArea.classList.add('no-preview');
+  previewPanel.style.display = 'none';
 
   // Initialize modules
   Preview.init(previewPanel);
@@ -74,8 +78,10 @@ export function init() {
 
   // Wire search results
   Search.onResults((results) => {
-    currentResults = results;
-    selectedIndex = results.length > 0 ? 0 : -1;
+    // Order into Raycast-style contiguous category groups (so visual order ==
+    // selection order), highest-score within each group.
+    currentResults = orderResults(results);
+    selectedIndex = currentResults.length > 0 ? 0 : -1;
     renderResults(resultsPanel);
     updatePreview();
   });
@@ -138,6 +144,13 @@ export function init() {
   // backend emits `supersearch://reset`. Clear stale state and refocus so the
   // user always lands on an empty, ready prompt — like Spotlight.
   Bridge.listen('supersearch://reset', () => {
+    // Replay the Raycast open animation each time the palette is summoned.
+    const palette = document.querySelector('.palette-container');
+    if (palette) {
+      palette.classList.remove('rc-animate');
+      void palette.offsetWidth; // force reflow so the animation restarts
+      palette.classList.add('rc-animate');
+    }
     searchInput.value = '';
     currentResults = [];
     selectedIndex = -1;
@@ -221,18 +234,27 @@ function renderResults(panel) {
       return;
     }
 
-    panel.innerHTML = currentResults.map((result, i) => `
-      <div class="result-item ${i === selectedIndex ? 'result-item--active' : ''} ${result.category === 'Agent' ? 'result-item--agent' : ''}"
-           data-index="${i}"
-           id="result-${result.id}">
-        <div class="result-item__icon">${result.icon}</div>
-        <div class="result-item__content">
-          <div class="result-item__title">${escapeHtml(result.title)}</div>
-          <div class="result-item__subtitle">${escapeHtml(result.subtitle)}</div>
-        </div>
-        <span class="result-item__category">${escapeHtml(result.category)}</span>
-      </div>
-    `).join('');
+    let lastLabel = null;
+    const html = [];
+    currentResults.forEach((result, i) => {
+      const label = sectionLabel(result.category);
+      if (label !== lastLabel) {
+        lastLabel = label;
+        html.push(`<div class="results-section__header">${escapeHtml(label)}</div>`);
+      }
+      html.push(`
+        <div class="result-item ${i === selectedIndex ? 'result-item--active' : ''} ${result.category === 'Agent' ? 'result-item--agent' : ''}"
+             data-index="${i}"
+             role="option" aria-selected="${i === selectedIndex}">
+          <div class="result-item__icon">${result.icon}</div>
+          <div class="result-item__content">
+            <div class="result-item__title">${escapeHtml(result.title)}</div>
+            ${result.subtitle ? `<div class="result-item__subtitle">${escapeHtml(result.subtitle)}</div>` : ''}
+          </div>
+          <span class="result-item__category">${escapeHtml(sectionLabel(result.category))}</span>
+        </div>`);
+    });
+    panel.innerHTML = html.join('');
 
     // Attach click handlers
     panel.querySelectorAll('.result-item').forEach(el => {
@@ -304,8 +326,33 @@ function formatUptime(seconds) {
 
 function escapeHtml(str) {
   const div = document.createElement('div');
-  div.textContent = str;
+  div.textContent = str == null ? '' : String(str);
   return div.innerHTML;
+}
+
+/** Category display priority (lower = higher in the list), Raycast-style. */
+const CATEGORY_RANK = { Agent: 0, Command: 1, Application: 2, Extension: 3, System: 4, Folder: 5, File: 6 };
+
+/** Human section header for a result category. */
+function sectionLabel(category) {
+  switch (category) {
+    case 'Agent': return 'AI Agent';
+    case 'Command': return 'Commands';
+    case 'Application': return 'Applications';
+    case 'Extension': return 'Extensions';
+    case 'System': return 'System';
+    case 'File': case 'Folder': return 'Files';
+    default: return category || 'Results';
+  }
+}
+
+/** Order results into contiguous category groups (stable; keeps score order within a group). */
+function orderResults(results) {
+  return [...(results || [])].sort((a, b) => {
+    const ra = CATEGORY_RANK[a.category] ?? 99;
+    const rb = CATEGORY_RANK[b.category] ?? 99;
+    return ra - rb; // stable sort preserves the incoming score order within a category
+  });
 }
 
 // Auto-initialize

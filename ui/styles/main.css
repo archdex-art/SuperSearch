@@ -998,3 +998,256 @@
 .ext-consent__perm-name { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--accent-cyan); }
 .ext-consent__perm-why { font-size: var(--text-xs); color: var(--text-secondary); }
 .ext-consent__actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ============================================================================
+   RAYCAST REDESIGN  (unlayered — overrides everything above by cascade order)
+   Modern, sleek, minimal: dark translucent window, large search, soft selection
+   highlight, full-width single-column results, compact footer.
+   ============================================================================ */
+
+:root {
+  /* Raycast-like dark palette */
+  --rc-bg: rgba(24, 24, 27, 0.72);
+  --rc-bg-solid: #18181b;
+  --rc-border: rgba(255, 255, 255, 0.09);
+  --rc-hairline: rgba(255, 255, 255, 0.07);
+  --rc-text: rgba(255, 255, 255, 0.92);
+  --rc-text-dim: rgba(255, 255, 255, 0.5);
+  --rc-text-faint: rgba(255, 255, 255, 0.34);
+  --rc-sel: rgba(255, 255, 255, 0.09);
+  --rc-accent: #ff6363;            /* Raycast-ish coral accent */
+  --rc-radius: 12px;
+  --rc-font: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+}
+
+body {
+  background: transparent;
+  font-family: var(--rc-font);
+}
+
+/* —— Window —— */
+.palette-container {
+  background: var(--rc-bg);
+  -webkit-backdrop-filter: blur(34px) saturate(1.7);
+  backdrop-filter: blur(34px) saturate(1.7);
+  border: 1px solid var(--rc-border);
+  border-radius: var(--rc-radius);
+  box-shadow: 0 24px 70px -12px rgba(0, 0, 0, 0.65), 0 0 0 0.5px rgba(0,0,0,0.4);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* —— Drag bar: invisible, just a thin drag region with corner actions —— */
+.title-bar {
+  height: 0;
+  min-height: 0;
+  padding: 0;
+  -webkit-app-region: drag;
+}
+.title-bar__label { display: none; }
+.title-bar__action {
+  position: absolute;
+  top: 14px;
+  z-index: 5;
+  -webkit-app-region: no-drag;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 4px;
+  border-radius: 6px;
+  opacity: 0.45;
+  transition: opacity 120ms ease, background 120ms ease;
+}
+.title-bar__action:hover { opacity: 0.95; background: var(--rc-sel); }
+.title-bar__action { right: 12px; }
+.title-bar__action--left { left: auto; right: 40px; }
+
+/* —— Search bar —— */
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 58px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--rc-hairline);
+  background: transparent;
+  flex-shrink: 0;
+}
+.search-bar__icon {
+  width: 20px; height: 20px;
+  color: var(--rc-text-faint);
+  flex-shrink: 0;
+}
+.search-bar__input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--rc-text);
+  font-family: var(--rc-font);
+  font-size: 19px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  caret-color: var(--rc-accent);
+}
+.search-bar__input::placeholder { color: var(--rc-text-faint); }
+.search-bar__badge {
+  font-size: 11px;
+  color: var(--rc-text-faint);
+  background: var(--rc-sel);
+  border: 1px solid var(--rc-hairline);
+  border-radius: 6px;
+  padding: 3px 7px;
+  font-family: var(--rc-font);
+}
+
+/* —— Telemetry strip: removed for Raycast minimalism —— */
+.telemetry-strip { display: none !important; }
+
+/* —— Content / results (full-width single column by default) —— */
+.content-area {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.results-panel {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.preview-panel {
+  flex: 0 0 44%;
+  border-left: 1px solid var(--rc-hairline);
+  overflow-y: auto;
+}
+.content-area.no-preview .preview-panel { display: none; }
+
+/* Agent console only occupies space when active (keeps the footer pinned). */
+.agent-panel:not(.active) { display: none; }
+.agent-panel.active { flex: 1; min-height: 0; overflow-y: auto; }
+
+/* Section header (Raycast-style grouping) */
+.results-section__header {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--rc-text-faint);
+  padding: 10px 10px 4px;
+  user-select: none;
+}
+
+/* —— Result rows —— */
+.result-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: none;
+  cursor: default;
+  background: transparent;
+  transition: background 90ms ease;
+}
+.result-item:hover { background: rgba(255, 255, 255, 0.045); }
+.result-item--active,
+.result-item--active:hover { background: var(--rc-sel); box-shadow: none; border-left: 0; }
+/* Kill the legacy left-accent pseudo-element so selection is a clean fill. */
+.result-item::before, .result-item::after { content: none !important; display: none !important; }
+.result-item__icon {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  flex-shrink: 0;
+}
+.result-item__content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.result-item__title {
+  font-size: 14px;
+  font-weight: 450;
+  color: var(--rc-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  letter-spacing: -0.01em;
+}
+.result-item__subtitle {
+  font-size: 12px;
+  color: var(--rc-text-faint);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.result-item__category {
+  font-size: 12px;
+  color: var(--rc-text-faint);
+  flex-shrink: 0;
+  padding-left: 8px;
+  opacity: 0;
+  transition: opacity 90ms ease;
+}
+.result-item--active .result-item__category { opacity: 1; }
+.result-item--agent .result-item__icon { filter: none; }
+
+/* Empty state */
+.results-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; padding: 56px 16px; color: var(--rc-text-faint); margin: auto;
+}
+.results-empty__icon { font-size: 26px; opacity: 0.5; }
+.results-empty__text { font-size: 13px; }
+
+/* —— Footer —— */
+.shortcut-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 40px;
+  padding: 0 12px 0 14px;
+  border-top: 1px solid var(--rc-hairline);
+  background: rgba(0, 0, 0, 0.18);
+  flex-shrink: 0;
+}
+.shortcut-bar::before {
+  content: "⌘ SuperSearch";
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--rc-text-dim);
+  margin-right: auto;
+  letter-spacing: -0.01em;
+}
+.shortcut { display: flex; align-items: center; gap: 5px; }
+.shortcut__key {
+  font-size: 11px;
+  color: var(--rc-text-dim);
+  background: var(--rc-sel);
+  border: 1px solid var(--rc-hairline);
+  border-radius: 5px;
+  min-width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  font-family: var(--rc-font);
+}
+.shortcut__label { font-size: 12px; color: var(--rc-text-faint); }
+
+/* —— Scrollbar (thin, Raycast-like) —— */
+.results-panel::-webkit-scrollbar, .preview-panel::-webkit-scrollbar { width: 8px; }
+.results-panel::-webkit-scrollbar-thumb, .preview-panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.results-panel::-webkit-scrollbar-track { background: transparent; }
+
+/* —— Mode badge when in agent mode —— */
+#mode-badge { white-space: nowrap; }
