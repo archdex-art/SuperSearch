@@ -62,8 +62,15 @@ export function init() {
   Keyboard.init();
 
   // Wire search input
+  const paletteContainer = document.getElementById('palette-container');
   searchInput.addEventListener('input', (e) => {
     const query = e.target.value;
+
+    if (query.trim().length === 0) {
+      if (paletteContainer) paletteContainer.style.display = 'none';
+    } else {
+      if (paletteContainer) paletteContainer.style.display = 'flex';
+    }
 
     // Hide agent panel when user types
     if (agentMode) {
@@ -92,11 +99,9 @@ export function init() {
       if (Extensions.isOpen() || Settings.isOpen()) return;
       if (currentResults.length === 0) return;
       selectedIndex = Math.max(0, Math.min(currentResults.length - 1, selectedIndex + direction));
-      renderResults(resultsPanel);
+      // Glide the highlight (no list rebuild) for a smooth, Spotlight-like move.
+      positionHighlight(resultsPanel, true);
       updatePreview();
-      // Ensure active item is visible
-      const active = resultsPanel.querySelector('.result-item--active');
-      if (active) active.scrollIntoView({ block: 'nearest' });
     },
 
     onExecute: (withMeta) => {
@@ -137,6 +142,28 @@ export function init() {
     },
   });
 
+  // Composer toolbar actions
+  const submit = () => {
+    if (selectedIndex >= 0 && selectedIndex < currentResults.length) {
+      executeResult(currentResults[selectedIndex], false, contentArea, agentPanel, modeBadge);
+    } else if (searchInput.value.trim()) {
+      enterAgent(searchInput.value.trim());
+    }
+  };
+  document.getElementById('submit-btn')?.addEventListener('click', submit);
+  document.getElementById('deepsearch-btn')?.addEventListener('click', () => {
+    const q = searchInput.value.trim();
+    if (q) enterAgent(q);
+  });
+  document.getElementById('websearch-btn')?.addEventListener('click', () => {
+    const q = searchInput.value.trim();
+    if (q) enterAgent(`search the web for ${q}`);
+  });
+  document.getElementById('attach-btn')?.addEventListener('click', async () => {
+    const path = await Bridge.pickDirectory();
+    if (path) { searchInput.value = path; searchInput.dispatchEvent(new Event('input', { bubbles: true })); }
+  });
+
   // Auto-focus search input
   searchInput.focus();
 
@@ -150,6 +177,7 @@ export function init() {
       palette.classList.remove('rc-animate');
       void palette.offsetWidth; // force reflow so the animation restarts
       palette.classList.add('rc-animate');
+      palette.style.display = 'none'; // hide it on reset until typed
     }
     searchInput.value = '';
     currentResults = [];
@@ -219,6 +247,24 @@ async function executeResult(result, withMeta, contentArea, agentPanel, modeBadg
 }
 
 /**
+ * Enter agent mode and run a natural-language query (used by the composer
+ * submit / Deep search / Search buttons).
+ * @param {string} query
+ */
+async function enterAgent(query) {
+  agentMode = true;
+  const contentArea = document.getElementById('content-area');
+  const modeBadge = document.getElementById('mode-badge');
+  if (contentArea) contentArea.style.display = 'none';
+  if (modeBadge) modeBadge.textContent = '🤖 Agent';
+  try {
+    await Agent.executeQuery(query);
+  } catch (err) {
+    console.error('[App] Agent failed:', err);
+  }
+}
+
+/**
  * Render search results into the results panel.
  * @param {HTMLElement} panel
  */
@@ -227,15 +273,16 @@ function renderResults(panel) {
     if (currentResults.length === 0) {
       panel.innerHTML = `
         <div class="results-empty">
-          <span class="results-empty__icon">⌘</span>
-          <span class="results-empty__text">Search apps, files, or type a command</span>
+          <span class="results-empty__icon">✨</span>
+          <span class="results-empty__text">Ask anything, or search apps, files &amp; commands</span>
         </div>
       `;
       return;
     }
 
+    // Sliding selection highlight (a single element that glides between rows).
     let lastLabel = null;
-    const html = [];
+    const html = ['<div class="selection-highlight" aria-hidden="true"></div>'];
     currentResults.forEach((result, i) => {
       const label = sectionLabel(result.category);
       if (label !== lastLabel) {
@@ -243,40 +290,72 @@ function renderResults(panel) {
         html.push(`<div class="results-section__header">${escapeHtml(label)}</div>`);
       }
       html.push(`
-        <div class="result-item ${i === selectedIndex ? 'result-item--active' : ''} ${result.category === 'Agent' ? 'result-item--agent' : ''}"
-             data-index="${i}"
-             role="option" aria-selected="${i === selectedIndex}">
+        <div class="result-item ${result.category === 'Agent' ? 'result-item--agent' : ''}"
+             data-index="${i}" role="option" aria-selected="false">
           <div class="result-item__icon">${result.icon}</div>
           <div class="result-item__content">
             <div class="result-item__title">${escapeHtml(result.title)}</div>
             ${result.subtitle ? `<div class="result-item__subtitle">${escapeHtml(result.subtitle)}</div>` : ''}
           </div>
-          <span class="result-item__category">${escapeHtml(sectionLabel(result.category))}</span>
+          <div class="result-item__action-hint">
+            <span>Search ${escapeHtml(result.title)}</span>
+            <span class="result-item__action-key">tab</span>
+          </div>
         </div>`);
     });
     panel.innerHTML = html.join('');
 
-    // Attach click handlers
+    // Click / double-click — move the highlight (no rebuild), execute on dbl.
     panel.querySelectorAll('.result-item').forEach(el => {
       el.addEventListener('click', () => {
         selectedIndex = parseInt(el.dataset.index, 10);
-        renderResults(panel);
+        positionHighlight(panel, true);
         updatePreview();
       });
-
-      // Double-click to execute
       el.addEventListener('dblclick', () => {
         selectedIndex = parseInt(el.dataset.index, 10);
         const result = currentResults[selectedIndex];
         if (result) {
-          const contentArea = document.getElementById('content-area');
-          const agentPanel = document.getElementById('agent-panel');
-          const modeBadge = document.getElementById('mode-badge');
-          executeResult(result, false, contentArea, agentPanel, modeBadge);
+          executeResult(result, false,
+            document.getElementById('content-area'),
+            document.getElementById('agent-panel'),
+            document.getElementById('mode-badge'));
         }
       });
     });
+
+    // Place the highlight on the first row without animating (fresh list).
+    positionHighlight(panel, false);
   });
+}
+
+/**
+ * Move the sliding selection highlight to the active row and sync the active
+ * class / aria. When `animate` is false the move is instant (used on re-render).
+ * @param {HTMLElement} panel
+ * @param {boolean} animate
+ */
+function positionHighlight(panel, animate) {
+  const hl = panel.querySelector('.selection-highlight');
+  panel.querySelectorAll('.result-item').forEach(r => {
+    r.classList.remove('result-item--active');
+    r.setAttribute('aria-selected', 'false');
+  });
+  if (!hl) return;
+  if (selectedIndex < 0) { hl.style.opacity = '0'; return; }
+  const active = panel.querySelector(`.result-item[data-index="${selectedIndex}"]`);
+  if (!active) { hl.style.opacity = '0'; return; }
+
+  active.classList.add('result-item--active');
+  active.setAttribute('aria-selected', 'true');
+
+  if (!animate) hl.classList.add('no-anim');
+  hl.style.transform = `translateY(${active.offsetTop}px)`;
+  hl.style.height = `${active.offsetHeight}px`;
+  hl.style.opacity = '1';
+  if (!animate) { void hl.offsetWidth; hl.classList.remove('no-anim'); }
+
+  active.scrollIntoView({ block: 'nearest' });
 }
 
 /**

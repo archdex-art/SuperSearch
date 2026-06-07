@@ -13,39 +13,33 @@
 </head>
 <body>
 
-  <main class="palette-container" role="application" aria-label="SuperSearch Command Palette">
+  <main class="app-layout" role="application" aria-label="SuperSearch Command Palette">
 
-    <!-- Title Bar (drag region) -->
-    <div class="title-bar">
-      <span class="title-bar__label">SuperSearch</span>
-      <button id="settings-btn" class="title-bar__action title-bar__action--left" type="button"
-              title="Settings" aria-label="Settings">⚙️</button>
-      <button id="extensions-btn" class="title-bar__action" type="button"
-              title="Manage Extensions" aria-label="Manage Extensions">🧩</button>
-    </div>
+    <div class="main-column">
+      <!-- Search Pill -->
+      <div class="search-pill" role="search">
+        <svg class="search-pill__icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="8.5" cy="8.5" r="5.5"/>
+          <line x1="13" y1="13" x2="18" y2="18"/>
+        </svg>
+        <input
+          id="search-input"
+          class="search-pill__input"
+          type="text"
+          placeholder="Super Search"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          spellcheck="false"
+          aria-label="Search"
+        >
+        <span id="mode-badge" class="search-pill__badge" aria-hidden="true">⌥ Space</span>
+      </div>
 
-    <!-- Search Bar -->
-    <div class="search-bar" role="search">
-      <svg class="search-bar__icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <circle cx="8.5" cy="8.5" r="5.5"/>
-        <line x1="13" y1="13" x2="18" y2="18"/>
-      </svg>
-      <input
-        id="search-input"
-        class="search-bar__input"
-        type="text"
-        placeholder="Search apps, files, or type a command…"
-        autocomplete="off"
-        autocorrect="off"
-        autocapitalize="off"
-        spellcheck="false"
-        aria-label="Search"
-      >
-      <span id="mode-badge" class="search-bar__badge" aria-hidden="true">⌥ Space</span>
-    </div>
-
-    <!-- Telemetry Strip -->
-    <div class="telemetry-strip" role="status" aria-label="Kernel Telemetry">
+      <!-- Results Palette -->
+      <div class="palette-container" id="palette-container" style="display: none;">
+        <!-- Telemetry Strip -->
+        <div class="telemetry-strip" role="status" aria-label="Kernel Telemetry">
       <div class="telemetry-item">
         <span class="telemetry-item__dot telemetry-item__dot--green" aria-hidden="true"></span>
         <span class="telemetry-item__label">Scheduler</span>
@@ -90,6 +84,40 @@
       <!-- Rendered by agent.js -->
     </div>
 
+    <!-- Composer Toolbar (Raycast/AI-composer style action row) -->
+    <div class="composer-toolbar" role="toolbar" aria-label="Actions">
+      <button class="ctool-btn" id="attach-btn" type="button" title="Attach a file" aria-label="Attach a file">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+        </svg>
+      </button>
+      <button class="ctool-pill" id="deepsearch-btn" type="button">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="8.5" cy="8.5" r="5.5"/><line x1="13" y1="13" x2="18" y2="18"/>
+        </svg>
+        <span>Deep search</span>
+      </button>
+      <button class="ctool-pill" id="websearch-btn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>
+        </svg>
+        <span>Search</span>
+      </button>
+
+      <span class="ctool-spacer"></span>
+
+      <button class="ctool-btn" id="voice-btn" type="button" title="Voice" aria-label="Voice">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <path d="M5 11v2M9 7v10M13 4v16M17 8v8M21 11v2"/>
+        </svg>
+      </button>
+      <button class="ctool-btn ctool-btn--submit" id="submit-btn" type="button" title="Run (↵)" aria-label="Run">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 19V5M5 12l7-7 7 7"/>
+        </svg>
+      </button>
+    </div>
+
     <!-- Keyboard Shortcut Bar -->
     <nav class="shortcut-bar" aria-label="Keyboard Shortcuts">
       <div class="shortcut">
@@ -113,6 +141,20 @@
         <span class="shortcut__label">Close</span>
       </div>
     </nav>
+    </div> <!-- End palette-container -->
+    </div> <!-- End main-column -->
+
+    <div class="side-column">
+      <div class="floating-actions">
+        <button id="settings-btn" class="floating-btn" type="button" title="Settings" aria-label="Settings">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </button>
+        <button id="extensions-btn" class="floating-btn" type="button" title="Manage Extensions" aria-label="Manage Extensions">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 11v-2a2 2 0 0 0-2-2h-2V5a2 2 0 1 0-4 0v2H9a2 2 0 0 0-2 2v2H5a2 2 0 1 0 0 4h2v2a2 2 0 0 0 2 2h2v2a2 2 0 1 0 4 0v-2h2a2 2 0 0 0 2-2v-2h2a2 2 0 1 0 0-4h-2z"></path></svg>
+        </button>
+      </div>
+    </div>
+
 
     <!-- Extension Manager (overlay) -->
     <div id="extensions-overlay" class="ext-overlay" hidden>
