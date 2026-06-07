@@ -36,13 +36,22 @@ pub struct AgentStepResponse {
 /// Execute a natural-language query through the agentic AI controller.
 ///
 /// Pipeline: Query → Intent Classification → Task Graph → Execution → Response
+///
+/// The agent spawns blocking OS processes (`open`/`osascript`/…). To keep the
+/// async IPC runtime responsive, that work runs on a dedicated blocking thread
+/// via `spawn_blocking` rather than on an async worker — so a multi-step command
+/// never stalls other IPC calls or the UI.
 #[command]
-pub fn agent_query(
+pub async fn agent_query(
     query: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<AgentQueryResponse, String> {
     let query = validate_query(query)?;
-    let response = state.agent.process_query(&query);
+    let agent = state.agent.clone();
+
+    let response = tokio::task::spawn_blocking(move || agent.process_query(&query))
+        .await
+        .map_err(|e| format!("Agent task failed: {e}"))?;
 
     Ok(AgentQueryResponse {
         query: response.query,
