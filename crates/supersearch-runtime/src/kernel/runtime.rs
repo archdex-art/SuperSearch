@@ -86,6 +86,8 @@ pub struct RuntimeKernel {
     pub process_manager: ProcessManager,
     /// The agentic AI controller (thread-safe, lock-free reads).
     pub agent: Arc<AgentController>,
+    /// Absolute directory where journal segments are written (for the reader).
+    pub journal_dir: String,
 
     /// The journal writer handle (runs as a Background task).
     journal_writer: Option<JournalWriter>,
@@ -182,6 +184,7 @@ impl RuntimeKernel {
             os_automation,
             process_manager,
             agent,
+            journal_dir: config.journal_dir.clone(),
             journal_writer: Some(journal_writer),
             supervisor,
             scheduler_config: config.scheduler,

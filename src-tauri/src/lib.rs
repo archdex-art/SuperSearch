@@ -161,6 +161,7 @@ pub fn run() {
             commands::extensions::execute_extension_action,
             commands::settings::get_settings,
             commands::settings::update_settings,
+            commands::journal::get_journal_summary,
         ])
         // Spotlight-style dismiss: hide the palette when it loses focus
         // (e.g. the user clicks another app), if enabled in settings.

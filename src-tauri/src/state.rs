@@ -32,6 +32,8 @@ pub struct AppState {
     pub boot_time_ms: u64,
     /// The agentic AI controller (thread-safe).
     pub agent: Arc<AgentController>,
+    /// Absolute directory of journal segments (for the audit reader).
+    pub journal_dir: String,
 }
 
 impl AppState {
@@ -48,6 +50,7 @@ impl AppState {
             boot_instant: Instant::now(),
             boot_time_ms: boot_duration_ms,
             agent: kernel.agent.clone(),
+            journal_dir: kernel.journal_dir.clone(),
         }
     }
 }
