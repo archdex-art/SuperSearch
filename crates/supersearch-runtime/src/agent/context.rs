@@ -41,6 +41,12 @@ pub enum WorkspaceContext {
     General,
 }
 
+impl Default for ContextEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ContextEngine {
     pub fn new() -> Self {
         Self {

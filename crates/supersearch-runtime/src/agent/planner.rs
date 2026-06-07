@@ -12,6 +12,12 @@ use super::task_graph::{TaskGraph, TaskNodeKind};
 /// Compiles classified intents into executable task graphs.
 pub struct TaskPlanner;
 
+impl Default for TaskPlanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TaskPlanner {
     pub fn new() -> Self {
         Self

@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 
-fn scheduler_benchmark(c: &mut Criterion) {
+fn scheduler_benchmark(_c: &mut Criterion) {
     // Benchmark implementation will go here
 }
 

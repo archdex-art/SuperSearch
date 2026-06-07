@@ -26,7 +26,7 @@ SuperSearch follows a modular architecture built for performance, security, and 
 * **`crates/supersearch-runtime/` (AI Kernel):** The autonomous brain of SuperSearch.
   * `patterns.rs` — Natural Language Classifier mapped to deterministic Intents.
   * `planner.rs` — Compiles Intents into DAG-based `TaskGraph` structures.
-  * `executor.rs` — Executes the task graphs, manipulating macOS via shell and `osascript`.
+  * `executor.rs` — Executes the task graphs, driving macOS via argument-vector process spawns (`open`, `mdfind`, `osascript`) with a hard per-action timeout.
   * `memory.rs` & `context.rs` — Short-term execution journals and spatial awareness.
 
 ---
@@ -66,7 +66,9 @@ The compiled binary will be located at `src-tauri/target/release/bundle/macos/Su
 ## ⌨️ Usage Guide
 
 ### 1. Unified Search
-Trigger the palette and just start typing. It fuzzy-matches system settings (`Sleep`, `Empty Trash`), Applications (`Spotify`, `Xcode`), and local files.
+Press **⌥ Space (Option+Space)** anywhere to summon the palette, then just start typing — it fuzzy-matches system settings (`Sleep`, `Empty Trash`), Applications (`Spotify`, `Xcode`), and local files. Press the hotkey again, hit **Esc**, or click away to dismiss it (Spotlight-style). SuperSearch runs as a menu-bar/accessory app with no Dock icon and floats over full-screen apps.
+
+> First launch will register the global shortcut and request Accessibility/Input-Monitoring permission. If Option+Space doesn't summon the window, grant SuperSearch access under **System Settings → Privacy & Security**.
 
 ### 2. Natural Language Agent
 Type full conversational commands to trigger the Runtime Kernel:
@@ -86,11 +88,63 @@ Use the `$` or `/terminal` prefix to instantly open Terminal and run a bash proc
 
 ---
 
-## 🛡️ Security & Sandboxing
+## 🧩 Extensions
 
-Because SuperSearch can autonomously drive your OS:
-- **No Blind `eval()`:** We use a strict Capability-Gated Action model. The agent maps intents to predefined enums (`TaskNodeKind`) rather than generating raw, unsafe bash scripts on the fly.
-- **Local First:** The intent classification engine is fully local, meaning your app launches and file lookups never leave your machine. 
+SuperSearch is extensible. An extension is a directory with a `manifest.toml`
+and an entrypoint, installed under
+`~/Library/Application Support/com.supersearch.app/extensions/`.
+
+Two execution models share one registry and (forthcoming) manager UI:
+- **Script extensions (available now):** the entrypoint is a native script run
+  as a subprocess — argv, no shell, hard 10s timeout.
+- **WASM extensions:** sandboxed `.wasm` (or `.wat`) modules run via wasmtime
+  with fuel + memory limits. ABI: export `memory`, `alloc(i32)->i32`, and
+  `query(i32,i32)->i64` returning a packed pointer to a JSON result array. See
+  [`examples/extensions/wasm-hello/`](examples/extensions/wasm-hello/).
+
+**Capability-gated & consent-based.** Enabling an extension grants it a
+*revocable* capability token scoped to `plugin.<id>`, covering exactly the
+permissions its manifest requests (each with a justification shown at enable
+time). Result-actions (`open_url`, `open_path`, `copy`) are checked against that
+token by the same gate the agent uses — an action the extension didn't request
+is denied before it touches the OS.
+
+**Manifest** (`manifest.toml`):
+```toml
+id = "ddg"
+name = "DuckDuckGo Search"
+version = "1.0.0"
+kind = "script"
+entrypoint = "run.sh"
+keywords = ["ddg", "search"]   # empty = consulted for every query
+
+[[permissions]]
+permission = "NetworkConnect"
+justification = "Open search results in your default browser"
+```
+
+**Script contract:** invoked as `run.sh "<query>"`; print a JSON array of
+`{ title, subtitle?, action? }` to stdout. A runnable example lives in
+[`examples/extensions/ddg/`](examples/extensions/ddg/).
+
+IPC surface (backing the manager UI): `list_extensions`, `install_extension`,
+`uninstall_extension`, `set_extension_enabled`, `query_extensions`,
+`execute_extension_action`.
+
+## 🛡️ Security Model
+
+Because SuperSearch can autonomously drive your OS, the threat model matters. Here is what is **actually enforced today**, not what is aspirational:
+
+- **Capability-mediated execution (enforced).** Before any OS action runs, the executor maps it to a required `(Namespace, Permission)` and asks the `CapabilityGate` whether the agent's token authorizes it. A denied action never reaches the OS — no process is spawned. The agent holds a single, revocable token granted at boot in the `agent` namespace ([runtime.rs](crates/supersearch-runtime/src/kernel/runtime.rs)); revoking it (or narrowing its permission set) immediately disables the corresponding actions. This is the object-capability model described below, now on the live execution path — covered by `action_without_capability_is_blocked_before_touching_the_os`.
+- **Auditable.** Every gate decision (`CapabilityCheck`) and OS result (`OsAutomationResult`) is appended to the append-only journal, giving a replayable audit trail of what the agent was asked to do and what it was allowed to do.
+- **No shell string interpolation of user input.** Every action that carries user-derived data (app names, file paths, URLs, search queries, clipboard content, terminal commands) is executed by spawning the target binary directly with an *argument vector* — `open`, `mdfind`, `pbcopy`, `osascript` — never by building a string and handing it to `sh -c`. Shell metacharacters (`;`, `|`, `$()`, backticks, quotes) are therefore inert. Dynamic values passed to AppleScript are bound as `on run argv` items, not interpolated into the script source. See `crates/supersearch-runtime/src/agent/executor.rs` and `src-tauri/src/commands/actions.rs`. Covered by `clipboard_write_roundtrips_untrusted_content`.
+- **Bounded execution.** Every OS action is killed if it exceeds a hard timeout (`ACTION_TIMEOUT`, 15s), so a hung helper process cannot wedge the app. IPC entry points reject empty and oversized input.
+- **Fixed intent taxonomy.** The agent maps natural language to a closed set of `TaskNodeKind` variants; it never synthesizes arbitrary scripts from user text. The only `sh -c` calls remaining are *constant* scripts authored in `planner.rs` (e.g. `pmset sleepnow`) that never contain user input.
+- **Local first.** Intent classification is fully local (rule-based, no LLM); your app launches and file lookups never leave your machine.
+
+### ⚠️ Implementation status
+
+The capability system (`capability/`) and the append-only journal (`journal/`) are now on the agent's execution path as described above. The cooperative scheduler (`scheduler/`), reactive graph (`reactive/`), and WASM plugin sandbox (`plugin/`) boot but are **not yet** load-bearing for first-party agent actions — they exist to host future third-party plugins, which will receive their own narrowly-scoped capability tokens through the same gate. Grant Accessibility permission only if you trust the build you are running.
 
 ## 🛠️ Contributing
 

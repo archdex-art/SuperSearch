@@ -66,16 +66,11 @@ pub fn search_files(query: &str) -> Vec<SearchResult> {
         return Vec::new();
     }
 
-    let cmd = format!(
-        "mdfind -name \"{}\" 2>/dev/null | head -12",
-        query.replace('"', "\\\"")
-    );
-
-    let output = match Command::new("sh")
-        .arg("-c")
-        .arg(&cmd)
-        .output()
-    {
+    // Spawn mdfind directly with an argument vector — never via `sh -c` — so a
+    // query like `` `id` `` or `$(...)` is treated as a literal search term, not
+    // a shell command. This path runs on every keystroke, so it is a prime
+    // injection target if interpolated into a shell string.
+    let output = match Command::new("mdfind").arg("-name").arg(query).output() {
         Ok(out) => out,
         Err(e) => {
             debug!(error = %e, "mdfind failed");
@@ -91,6 +86,7 @@ pub fn search_files(query: &str) -> Vec<SearchResult> {
     stdout
         .lines()
         .filter(|line| !line.is_empty())
+        .take(12)
         .enumerate()
         .map(|(i, path)| {
             let filename = path.rsplit('/').next().unwrap_or(path);
@@ -245,7 +241,7 @@ fn load_applications() -> Vec<AppEntry> {
         }
     }
 
-    apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    apps.sort_by_key(|a| a.name.to_lowercase());
     debug!(count = apps.len(), "Application index loaded");
     apps
 }
@@ -285,4 +281,25 @@ fn file_icon(filename: &str) -> String {
         _ => "📄",
     }
     .into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn system_commands_are_well_formed() {
+        let cmds = system_commands();
+        assert!(!cmds.is_empty(), "expected a non-empty system command catalog");
+        // Every command id is namespaced under `sys:` so execute_action routes it.
+        assert!(cmds.iter().all(|c| c.id.starts_with("sys:")), "all ids must be sys:");
+        // Ids are unique.
+        let mut ids: Vec<&str> = cmds.iter().map(|c| c.id.as_str()).collect();
+        let n = ids.len();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), n, "system command ids must be unique");
+        // Each has a human-readable title.
+        assert!(cmds.iter().all(|c| !c.title.is_empty()));
+    }
 }

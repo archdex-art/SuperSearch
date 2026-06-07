@@ -25,6 +25,12 @@ pub struct ReplayClock {
     current_ns: u64,
 }
 
+impl Default for ReplayClock {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReplayClock {
     pub fn new() -> Self { Self { current_ns: 0 } }
 
@@ -106,6 +112,12 @@ pub struct ReplayEngine {
     range_filter: Option<(SequenceNumber, SequenceNumber)>,
     /// Expected next sequence number (for gap detection).
     expected_sequence: u64,
+}
+
+impl Default for ReplayEngine {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ReplayEngine {

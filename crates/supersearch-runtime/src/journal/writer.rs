@@ -106,6 +106,9 @@ impl Segment {
         // In production: msync + chmod read-only.
     }
 
+    /// Bytes left before this segment must rotate. Used by the (pending)
+    /// segment-rotation path.
+    #[allow(dead_code)]
     fn remaining(&self) -> usize {
         self.capacity.saturating_sub(self.write_offset)
     }
@@ -217,6 +220,14 @@ impl JournalWriter {
             if batch_count > 1 {
                 debug!(batch_count, "Batch write complete");
             }
+
+            // Durability: persist the active segment whenever we catch up with
+            // the channel. Without this, entries lived only in memory until a
+            // 64 MiB rotation or shutdown — a crash lost the tail. Bounds loss
+            // to at most the entries still in flight on the channel.
+            if let Err(e) = self.flush().await {
+                error!(error = %e, "Journal flush failed");
+            }
         }
     }
 
@@ -225,7 +236,7 @@ impl JournalWriter {
         match self.active_segment.write(&entry) {
             Ok(_bytes) => {
                 self.total_entries += 1;
-                if self.total_entries % 10_000 == 0 {
+                if self.total_entries.is_multiple_of(10_000) {
                     debug!(total = self.total_entries, bytes_used = self.active_segment.write_offset, "Journal progress");
                 }
                 Ok(())
@@ -291,4 +302,37 @@ impl JournalWriter {
 
     /// Returns paths to all sealed segments (for compaction).
     pub fn sealed_segments(&self) -> &[PathBuf] { &self.sealed_segments }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::journal::entry::{EntryKind, JournalEntry};
+    use crate::journal::reader::JournalReader;
+
+    #[tokio::test]
+    async fn entries_are_flushed_and_read_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut writer, sender) = JournalWriter::new(dir.path(), 64);
+
+        for i in 0..5u64 {
+            sender
+                .send(JournalEntry::new(
+                    EntryKind::OsAutomationResult,
+                    i,
+                    "test".into(),
+                    vec![i as u8],
+                ))
+                .unwrap();
+        }
+        // Close the channel so the writer drains, flushes, and returns.
+        drop(sender);
+        writer.run().await.unwrap();
+
+        // A reader sees all entries persisted on disk (durability).
+        let reader = JournalReader::new(dir.path(), true);
+        let entries = reader.read_all().await.unwrap();
+        assert_eq!(entries.len(), 5);
+        assert!(entries.iter().all(|e| e.kind == EntryKind::OsAutomationResult));
+    }
 }

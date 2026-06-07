@@ -1,0 +1,14 @@
+id = "ddg"
+name = "DuckDuckGo Search"
+version = "1.0.0"
+author = "SuperSearch"
+description = "Open a DuckDuckGo web search for your query"
+kind = "script"
+entrypoint = "run.sh"
+keywords = ["ddg", "search", "web"]
+
+# Each requested capability is shown to the user (with this justification)
+# during the install/enable consent flow, then enforced by the capability gate.
+[[permissions]]
+permission = "NetworkConnect"
+justification = "Open search results in your default browser"

@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "supersearch-ui",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "4321", "--directory", "ui"],
+      "port": 4321
+    },
+    {
+      "name": "react-palette",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "react-command-palette", "--", "--port", "5173", "--strictPort"],
+      "port": 5173
+    }
+  ]
+}

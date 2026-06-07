@@ -4,7 +4,10 @@
   "version": "0.1.0",
   "identifier": "com.supersearch.app",
   "build": {
-    "frontendDist": "../ui"
+    "frontendDist": "../react-command-palette/dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm --prefix ../react-command-palette run dev",
+    "beforeBuildCommand": "npm --prefix ../react-command-palette run build"
   },
   "app": {
     "withGlobalTauri": true,
@@ -20,7 +23,7 @@
         "transparent": true,
         "alwaysOnTop": true,
         "center": true,
-        "visible": true,
+        "visible": false,
         "skipTaskbar": true,
         "shadow": false
       }
@@ -31,7 +34,15 @@
   },
   "bundle": {
     "active": true,
+    "targets": ["app", "dmg"],
+    "category": "Productivity",
+    "copyright": "© 2026 SuperSearch",
+    "shortDescription": "AI-native productivity launcher",
     "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
       "icons/icon.png"
     ],
     "macOS": {

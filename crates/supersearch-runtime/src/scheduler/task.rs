@@ -37,6 +37,9 @@ impl std::fmt::Display for TaskId {
 #[derive(Debug, Clone)]
 pub struct CancellationHandle {
     task_token: CancellationToken,
+    /// Reserved: cancels every task in the class at once. Held now so handles
+    /// carry the class link; not yet exercised by the scheduler loop.
+    #[allow(dead_code)]
     class_token: CancellationToken,
 }
 

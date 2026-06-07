@@ -6,6 +6,8 @@
 //!
 //! Thread-safe: Can be shared across Tauri command handlers via `Arc`.
 
+use std::sync::Arc;
+
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use tracing::info;
@@ -15,7 +17,10 @@ use super::executor::{AgentExecutor, StepResult};
 use super::memory::AgentMemory;
 use super::patterns::{AgentIntent, PatternEngine};
 use super::planner::TaskPlanner;
-use super::task_graph::{TaskGraph, TaskStatus};
+use super::task_graph::TaskGraph;
+use crate::capability::gate::CapabilityGate;
+use crate::capability::token::CapabilityToken;
+use crate::journal::writer::JournalSender;
 
 /// Request payload from the frontend.
 #[derive(Debug, Clone, Deserialize)]
@@ -76,12 +81,20 @@ pub struct AgentController {
 
 impl AgentController {
     /// Create a new agent controller with all subsystems.
-    pub fn new() -> Self {
+    ///
+    /// The controller does not hold ambient OS authority: it executes actions
+    /// only through `gate`, presenting `token`. Every decision is journaled via
+    /// `journal`.
+    pub fn new(
+        gate: Arc<CapabilityGate>,
+        token: CapabilityToken,
+        journal: Option<JournalSender>,
+    ) -> Self {
         info!("Agent controller initialized");
         Self {
             pattern_engine: PatternEngine::new(),
             planner: TaskPlanner::new(),
-            executor: AgentExecutor::new(),
+            executor: AgentExecutor::new(gate, token, journal),
             memory: Mutex::new(AgentMemory::new()),
             context: Mutex::new(ContextEngine::new()),
         }

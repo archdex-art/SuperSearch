@@ -8,12 +8,29 @@ description = "SuperSearch — AI-Native Productivity Layer Desktop App"
 supersearch-runtime = { path = "../crates/supersearch-runtime" }
 tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-global-shortcut = "2"
+tauri-plugin-dialog = "2"
+# Opt-in: auto-update requires signing keys (plugins.updater.pubkey), so it is
+# off by default and enabled for release builds via `--features updater`.
+tauri-plugin-updater = { version = "2", optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1.40", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 parking_lot = "0.12"
+
+[features]
+# Enable auto-update (requires plugins.updater.pubkey + signing keys). Off by
+# default so dev/unsigned builds boot without updater configuration.
+updater = ["dep:tauri-plugin-updater"]
+
+# macOS-only: set the NSWindow collection behavior so the palette can overlay
+# full-screen Spaces (FullScreenAuxiliary), which Tauri's helper doesn't expose.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+
+[dev-dependencies]
+tempfile = "3"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

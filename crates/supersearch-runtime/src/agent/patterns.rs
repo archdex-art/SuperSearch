@@ -82,6 +82,12 @@ pub enum InfoKind {
 /// No heap allocation beyond the returned `AgentIntent`.
 pub struct PatternEngine;
 
+impl Default for PatternEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PatternEngine {
     pub fn new() -> Self {
         Self
@@ -333,7 +339,7 @@ impl PatternEngine {
 
 /// Check if `input` matches any of the given patterns exactly.
 fn matches_any(input: &str, patterns: &[&str]) -> bool {
-    patterns.iter().any(|p| input == *p)
+    patterns.contains(&input)
 }
 
 /// Strip any matching prefix, returning the remainder.
@@ -378,8 +384,14 @@ mod tests {
     #[test]
     fn test_launch_app() {
         let engine = PatternEngine::new();
+        // A non-aliased app keeps its given name (title-cased).
+        match engine.classify("open Spotify") {
+            AgentIntent::LaunchApp { app_name, .. } => assert_eq!(app_name, "Spotify"),
+            other => panic!("Expected LaunchApp, got {:?}", other),
+        }
+        // A known alias is normalized to its canonical macOS app name.
         match engine.classify("open Chrome") {
-            AgentIntent::LaunchApp { app_name, .. } => assert_eq!(app_name, "Chrome"),
+            AgentIntent::LaunchApp { app_name, .. } => assert_eq!(app_name, "Google Chrome"),
             other => panic!("Expected LaunchApp, got {:?}", other),
         }
     }

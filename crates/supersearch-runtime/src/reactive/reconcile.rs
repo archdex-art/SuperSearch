@@ -62,6 +62,12 @@ pub struct ReconciliationEngine {
     total_diverged: u64,
 }
 
+impl Default for ReconciliationEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReconciliationEngine {
     pub fn new() -> Self {
         Self {
