@@ -1,44 +1,89 @@
 name: Release
 
-# Tag a version (e.g. `git tag v0.1.0 && git push --tags`) to build, (optionally)
-# sign + notarize, and publish a draft GitHub Release with the macOS artifacts.
-#
-# The build runs unsigned until you add the secrets below. None of these are
-# required to TRIGGER the workflow — missing ones simply skip signing.
+# Push a version tag (e.g. `git tag v0.2.0 && git push --tags`) to build
+# native installers for macOS, Linux, and Windows, then publish a draft
+# GitHub Release.  Code-signing secrets are optional — missing ones simply
+# skip signing/notarization while the build still succeeds.
 on:
   push:
     tags: ["v*"]
 
 jobs:
   release:
-    runs-on: macos-latest
     permissions:
       contents: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ── macOS universal (Intel + Apple Silicon) ──────────────────────
+          - platform: macos-latest
+            args: --target universal-apple-darwin
+            bundles: app,dmg
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+          # ── Linux x86-64 — .deb (Debian/Ubuntu) ─────────────────────────
+          - platform: ubuntu-22.04
+            args: ""
+            bundles: deb
+            rust_targets: ""
+
+          # ── Windows x86-64 — NSIS .exe installer + .msi ─────────────────
+          - platform: windows-latest
+            args: ""
+            bundles: nsis,msi
+            rust_targets: ""
+
+    runs-on: ${{ matrix.platform }}
+
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
 
-      - uses: Swatinem/rust-cache@v2
+      - name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@v2
 
-      - name: Build, sign, notarize & publish
+      # ── Linux: Tauri system dependencies ────────────────────────────────
+      - name: Install Tauri system dependencies (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: react-command-palette/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm --prefix react-command-palette ci
+
+      - name: Build & publish
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # --- Code signing (Apple Developer ID). Add as repo secrets to enable. ---
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          # --- Notarization (needs your Apple Team ID + app-specific password). ---
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # --- Updater artifact signing (`tauri signer generate`). ---
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Builds are UNSIGNED. Do not wire empty signing secrets here: passing
+          # an empty `APPLE_CERTIFICATE` makes tauri-action attempt (and fail) a
+          # keychain cert import on macOS. To enable signing, add the Apple
+          # Developer / Windows / updater secrets *and* their env vars back per
+          # RELEASING.md — only when the secrets actually exist.
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "SuperSearch ${{ github.ref_name }}"
           releaseDraft: true
           prerelease: false
-          args: --target aarch64-apple-darwin
+          # Limit bundles per-OS via `--bundles` so Linux doesn't attempt `rpm`
+          # (no rpmbuild on the runner) that `targets: "all"` would otherwise pull.
+          args: ${{ matrix.args }} --bundles ${{ matrix.bundles }}

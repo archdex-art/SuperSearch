@@ -97,7 +97,9 @@ pub fn run_query(dir: &Path, entrypoint: &str, query: &str) -> Result<Vec<Extens
         .map_err(|e| HostError::BadOutput(e.to_string()))
 }
 
-#[cfg(test)]
+// These tests build `#!/bin/sh` script extensions and `chmod +x` them, so they
+// are unix-only (macOS + Linux); Windows script execution is exercised elsewhere.
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::fs;

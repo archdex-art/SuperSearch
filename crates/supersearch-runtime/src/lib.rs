@@ -24,6 +24,7 @@
 //! | `reactive`  | Dependency graph with topological evaluation            |
 //! | `plugin`    | Sandboxed WASM adapter plugin runtime                   |
 //! | `kernel`    | Privileged OS automation primitives                     |
+//! | `platform`  | OS abstraction layer — backends behind one stable trait |
 
 pub mod scheduler;
 pub mod journal;
@@ -31,5 +32,6 @@ pub mod capability;
 pub mod reactive;
 pub mod plugin;
 pub mod kernel;
+pub mod platform;
 pub mod agent;
 pub mod extension;

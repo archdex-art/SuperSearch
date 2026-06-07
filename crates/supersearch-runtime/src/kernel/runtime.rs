@@ -31,7 +31,6 @@ use crate::reactive::graph::DependencyGraph;
 use crate::reactive::reconcile::ReconciliationEngine;
 use crate::plugin::host::PluginHost;
 use crate::agent::AgentController;
-use super::automation::OsAutomation;
 use super::process::ProcessManager;
 
 /// Configuration for the runtime kernel.
@@ -71,7 +70,6 @@ impl Default for KernelConfig {
 ///   ├── dependency_graph: DependencyGraph       (owned)
 ///   ├── reconciliation: ReconciliationEngine    (owned)
 ///   ├── plugin_host: PluginHost                 (owned)
-///   ├── os_automation: OsAutomation             (owned)
 ///   └── process_manager: ProcessManager         (owned)
 /// ```
 pub struct RuntimeKernel {
@@ -82,7 +80,6 @@ pub struct RuntimeKernel {
     pub dependency_graph: DependencyGraph,
     pub reconciliation: ReconciliationEngine,
     pub plugin_host: PluginHost,
-    pub os_automation: OsAutomation,
     pub process_manager: ProcessManager,
     /// The agentic AI controller (thread-safe, lock-free reads).
     pub agent: Arc<AgentController>,
@@ -136,10 +133,10 @@ impl RuntimeKernel {
         let plugin_host = PluginHost::new(registry.clone(), gate.clone());
         info!("Plugin host initialized");
 
-        // 6. OS automation.
-        let os_automation = OsAutomation::new(gate.clone());
+        // 6. Process manager. (OS automation lives behind the Platform
+        // Abstraction Layer, driven by the agent executor — not the kernel.)
         let process_manager = ProcessManager::new(config.max_processes);
-        info!("OS automation and process manager initialized");
+        info!("Process manager initialized");
 
         // 7. Agent controller.
         // Grant the agent a capability token scoped to the `agent` namespace,
@@ -181,7 +178,6 @@ impl RuntimeKernel {
             dependency_graph,
             reconciliation,
             plugin_host,
-            os_automation,
             process_manager,
             agent,
             journal_dir: config.journal_dir.clone(),

@@ -365,6 +365,7 @@ mod tests {
         );
 
         let (tx, rx) = tokio::sync::oneshot::channel::<u32>();
+        let sq = queue.clone();
         let task = queue
             .builder(PriorityClass::Interactive)
             .origin("test")
@@ -372,14 +373,13 @@ mod tests {
             .spawn(async move {
                 let v = tokio::task::spawn_blocking(|| 21u32 * 2).await.unwrap();
                 let _ = tx.send(v);
+                // Stop the executor *after* the result is sent — deterministic,
+                // rather than racing a fixed timer against task completion (which
+                // flaked on slower runners and dropped the sender).
+                sq.shutdown();
             });
         queue.enqueue(task);
 
-        let sq = queue.clone();
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(150)).await;
-            sq.shutdown();
-        });
         executor.run().await;
 
         let got = tokio::time::timeout(Duration::from_secs(2), rx)

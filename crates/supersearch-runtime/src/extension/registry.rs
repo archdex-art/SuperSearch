@@ -418,7 +418,9 @@ fn copy_dir(src: &Path, dest: &Path) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-#[cfg(test)]
+// These tests build `#!/bin/sh` script extensions and `chmod +x` them, so they
+// are unix-only (macOS + Linux); Windows packaging is exercised elsewhere.
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::fs;

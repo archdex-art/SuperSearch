@@ -55,3 +55,16 @@ Icon
 # Local AI memory / analysis cache / progress-tracking metadata.
 # Non-production artifact — never commit unless explicitly requested.
 /project_viewer
+
+# ----------------------------------------------------------------------
+# Planning / architecture notes
+# ----------------------------------------------------------------------
+# Forward-looking design/roadmap docs (largely aspirational). Kept as local
+# planning artifacts, not repo documentation, so the tree reflects the system
+# as built. Track explicitly with `git add -f` if one becomes a real spec.
+/SuperSearch_*.md
+
+# Stray Node manifests inside the Rust host crate. The real frontend deps live
+# in react-command-palette/; src-tauri/ is a Cargo crate and needs no package*.
+/src-tauri/package.json
+/src-tauri/package-lock.json

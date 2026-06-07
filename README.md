@@ -35,31 +35,52 @@ SuperSearch follows a modular architecture built for performance, security, and 
 
 SuperSearch is currently built exclusively for **macOS** (due to heavy reliance on `osascript` and Apple Events for zero-friction OS automation).
 
-### Prerequisites
+### Install (end users)
+
+SuperSearch ships as a native macOS app — **no Rust toolchain or terminal required**.
+
+1. Download the latest `SuperSearch_x.y.z_aarch64.dmg` from the
+   [**Releases** page](https://github.com/archdex-art/SuperSearch/releases).
+2. Open the `.dmg` and drag **SuperSearch** into your **Applications** folder.
+3. Launch it from Applications or Spotlight.
+
+> **Unsigned builds (current state):** until code signing + notarization are
+> configured (see [RELEASING.md](RELEASING.md)), macOS Gatekeeper will block the
+> first launch. Right-click the app → **Open** → **Open** to allow it once.
+>
+> **No release yet?** If the Releases page is empty, there isn't a pre-built
+> binary available — build from source using the steps below.
+
+### Build from source (contributors)
+
+#### Prerequisites
 1. **Rust & Cargo:** (Install via [rustup](https://rustup.rs/))
 2. **Tauri CLI:** Installed via Cargo or your package manager.
 3. **macOS:** Tested on macOS Ventura & Sonoma.
 
-### Running the App
+#### Run the dev server
+```bash
+cd src-tauri
+cargo tauri dev
+```
 
-1. Clone the repository and navigate into the project root.
-2. Initialize the development server:
-   ```bash
-   cd src-tauri
-   cargo tauri dev
-   ```
-3. **CRITICAL — Accessibility Permissions:** SuperSearch drives your Mac via simulated keystrokes and Apple Events. When you execute your first action (e.g. `/chatgpt hello`), macOS will prompt you for Accessibility access.
-   * Open **System Settings > Privacy & Security > Accessibility**.
-   * Toggle the switch to **ON** for your Terminal (or IDE) and for `SuperSearch`.
-   * *If you do not grant this permission, app commands and multi-step agent intents will silently fail.*
-
-### Building for Production
-To package a release `.app` bundle:
+#### Package a release bundle
 ```bash
 cd src-tauri
 cargo tauri build
 ```
-The compiled binary will be located at `src-tauri/target/release/bundle/macos/SuperSearch.app`.
+The `.app` and `.dmg` land in `src-tauri/target/release/bundle/`. To cut a
+published, (optionally) signed release, see [RELEASING.md](RELEASING.md).
+
+### Accessibility permissions (all install methods)
+
+**CRITICAL:** SuperSearch drives your Mac via simulated keystrokes and Apple
+Events. When you execute your first action (e.g. `/chatgpt hello`), macOS will
+prompt you for Accessibility access.
+* Open **System Settings > Privacy & Security > Accessibility**.
+* Toggle the switch to **ON** for `SuperSearch` (when running from source, also
+  enable it for your Terminal/IDE).
+* *If you do not grant this permission, app commands and multi-step agent intents will silently fail.*
 
 ---
 
