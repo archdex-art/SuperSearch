@@ -2,12 +2,12 @@
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-config-schema/schema.json",
   "productName": "SuperSearch",
   "version": "0.1.0",
-  "identifier": "com.supersearch.app",
+  "identifier": "com.supersearch.desktop",
   "build": {
     "frontendDist": "../react-command-palette/dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "npm --prefix ../react-command-palette run dev",
-    "beforeBuildCommand": "npm --prefix ../react-command-palette run build"
+    "beforeDevCommand": "npm --prefix react-command-palette run dev",
+    "beforeBuildCommand": "npm --prefix react-command-palette run build"
   },
   "app": {
     "withGlobalTauri": true,
