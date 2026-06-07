@@ -20,12 +20,39 @@ use settings::SettingsStore;
 use state::AppState;
 
 /// Absolute path for the runtime journal, under the user's data dir. Never a
-/// relative path: a packaged `.app` has a non-writable working directory.
+/// relative path: a packaged app may have a non-writable working directory.
 fn default_journal_dir() -> String {
-    if let Some(home) = std::env::var_os("HOME") {
-        let mut p = std::path::PathBuf::from(home);
-        p.push("Library/Application Support/com.supersearch.app/journal");
-        return p.to_string_lossy().into_owned();
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(home) = std::env::var_os("HOME") {
+            let mut p = std::path::PathBuf::from(home);
+            p.push("Library/Application Support/com.supersearch.app/journal");
+            return p.to_string_lossy().into_owned();
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(data) = std::env::var_os("XDG_DATA_HOME") {
+            return std::path::PathBuf::from(data)
+                .join("supersearch/journal")
+                .to_string_lossy()
+                .into_owned();
+        }
+        if let Some(home) = std::env::var_os("HOME") {
+            return std::path::PathBuf::from(home)
+                .join(".local/share/supersearch/journal")
+                .to_string_lossy()
+                .into_owned();
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(appdata) = std::env::var_os("APPDATA") {
+            return std::path::PathBuf::from(appdata)
+                .join("supersearch\\journal")
+                .to_string_lossy()
+                .into_owned();
+        }
     }
     std::env::temp_dir()
         .join("supersearch/journal")

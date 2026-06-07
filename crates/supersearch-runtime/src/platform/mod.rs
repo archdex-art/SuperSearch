@@ -35,6 +35,7 @@ pub(crate) mod exec;
 // `allow(dead_code)`.
 mod macos;
 mod linux;
+mod windows;
 mod unsupported;
 
 /// Result of executing a single OS automation primitive.
@@ -96,7 +97,11 @@ pub fn default_backend() -> Arc<dyn PlatformBackend> {
     {
         Arc::new(linux::LinuxBackend::new())
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(target_os = "windows")]
+    {
+        Arc::new(windows::WindowsBackend::new())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         Arc::new(unsupported::UnsupportedBackend::new())
     }

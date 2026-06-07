@@ -10,10 +10,9 @@ env:
   RUSTFLAGS: "-D warnings"
 
 jobs:
-  build-test:
-    name: Build, test & lint (macOS)
-    # macOS runner: SuperSearch depends on `open`/`osascript`/`mdfind`/`pbcopy`,
-    # and several tests exercise real macOS automation binaries.
+  # ── macOS — full Tauri build + tests ───────────────────────────────────────
+  build-macos:
+    name: Build & test (macOS)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,10 +25,6 @@ jobs:
       - name: Cache cargo registry & target
         uses: Swatinem/rust-cache@v2
 
-      # Tauri system dependencies are preinstalled on the macOS runner image.
-
-      # Advisory only: the codebase uses deliberate manual alignment, so a hard
-      # rustfmt gate would be noise. Surface drift without failing the build.
       - name: Format check (advisory)
         run: cargo fmt --all --check
         continue-on-error: true
@@ -43,13 +38,9 @@ jobs:
       - name: Test
         run: cargo test --workspace --verbose
 
-  linux-runtime:
-    name: Runtime build, test & lint (Linux)
-    # Verifies the runtime kernel + Platform Abstraction Layer (incl. the Linux
-    # backend selection) actually build and pass on real Linux. Scoped to the
-    # `supersearch-runtime` crate: the Tauri host (`src-tauri`) additionally
-    # needs GTK/WebKit system deps and a host-layer migration off direct
-    # macOS calls before it builds here — tracked as follow-up.
+  # ── Linux — full Tauri build + tests ───────────────────────────────────────
+  build-linux:
+    name: Build & test (Linux)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -62,11 +53,66 @@ jobs:
       - name: Cache cargo registry & target
         uses: Swatinem/rust-cache@v2
 
+      # Tauri v2 system dependencies on Ubuntu.
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Install Node (for frontend build)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: react-command-palette/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm --prefix react-command-palette ci
+
       - name: Clippy (deny warnings)
-        run: cargo clippy -p supersearch-runtime --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Build
-        run: cargo build -p supersearch-runtime --verbose
+        run: cargo build --workspace --verbose
 
       - name: Test
-        run: cargo test -p supersearch-runtime --verbose
+        run: cargo test --workspace --verbose
+
+  # ── Windows — full Tauri build + tests ─────────────────────────────────────
+  build-windows:
+    name: Build & test (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Node (for frontend build)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: react-command-palette/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm --prefix react-command-palette ci
+
+      - name: Clippy (deny warnings)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Build
+        run: cargo build --workspace --verbose
+
+      - name: Test
+        run: cargo test --workspace --verbose
