@@ -92,4 +92,6 @@ jobs:
           releaseName: "SuperSearch ${{ github.ref_name }}"
           releaseDraft: true
           prerelease: false
-          args: ${{ matrix.args }}
+          # Limit bundles per-OS via `--bundles` so Linux doesn't attempt `rpm`
+          # (no rpmbuild on the runner) that `targets: "all"` would otherwise pull.
+          args: ${{ matrix.args }} --bundles ${{ matrix.bundles }}
