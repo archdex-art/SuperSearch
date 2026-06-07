@@ -4,6 +4,7 @@
 //! extracts thread-safe handles for IPC, and launches the WebView.
 
 mod state;
+mod settings;
 mod commands;
 
 use std::sync::Arc;
@@ -15,11 +16,8 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 use supersearch_runtime::extension::ExtensionRegistry;
 use supersearch_runtime::kernel::runtime::{RuntimeKernel, KernelConfig};
+use settings::SettingsStore;
 use state::AppState;
-
-/// Global hotkey that summons / dismisses the palette. `Alt` is the macOS
-/// Option key, so this is Option+Space — the Spotlight-style chord.
-const TOGGLE_SHORTCUT: &str = "Alt+Space";
 
 /// Absolute path for the runtime journal, under the user's data dir. Never a
 /// relative path: a packaged `.app` has a non-writable working directory.
@@ -88,6 +86,23 @@ fn toggle_palette(app: &tauri::AppHandle) {
     }
 }
 
+/// Register `shortcut` as the global summon/dismiss hotkey (fires on key-down).
+pub(crate) fn register_toggle(app: &tauri::AppHandle, shortcut: &str) -> Result<(), String> {
+    app.global_shortcut()
+        .on_shortcut(shortcut, |app, _shortcut, event| {
+            if event.state == ShortcutState::Pressed {
+                toggle_palette(app);
+            }
+        })
+        .map_err(|e| e.to_string())
+}
+
+/// Atomically swap the global hotkey when the user rebinds it in settings.
+pub(crate) fn rebind_toggle(app: &tauri::AppHandle, old: &str, new: &str) -> Result<(), String> {
+    let _ = app.global_shortcut().unregister(old);
+    register_toggle(app, new)
+}
+
 /// Build and configure the Tauri application.
 ///
 /// ## Boot Sequence
@@ -144,19 +159,24 @@ pub fn run() {
             commands::extensions::set_extension_enabled,
             commands::extensions::query_extensions,
             commands::extensions::execute_extension_action,
+            commands::settings::get_settings,
+            commands::settings::update_settings,
         ])
         // Spotlight-style dismiss: hide the palette when it loses focus
-        // (e.g. the user clicks another app). Release-only so DevTools focus
-        // changes don't fight us during development.
+        // (e.g. the user clicks another app), if enabled in settings.
         .on_window_event(|window, event| {
-            #[cfg(not(debug_assertions))]
             if let tauri::WindowEvent::Focused(false) = event {
                 if window.label() == "main" {
-                    let _ = window.hide();
+                    let hide_on_blur = window
+                        .app_handle()
+                        .try_state::<Arc<SettingsStore>>()
+                        .map(|s| s.get().hide_on_blur)
+                        .unwrap_or(false);
+                    if hide_on_blur {
+                        let _ = window.hide();
+                    }
                 }
             }
-            // Silence unused-variable warnings in debug builds.
-            let _ = (window, event);
         })
         .setup(|app| {
             info!("Tauri setup complete — WebView ready");
@@ -175,20 +195,23 @@ pub fn run() {
                     .output();
             }
 
-            // Register the global summon/dismiss hotkey (Option+Space).
             let handle = app.handle().clone();
-            if let Err(e) = app.global_shortcut().on_shortcut(
-                TOGGLE_SHORTCUT,
-                move |app, _shortcut, event| {
-                    // Fire on key-down only; ignore the key-up event.
-                    if event.state == ShortcutState::Pressed {
-                        toggle_palette(app);
-                    }
-                },
-            ) {
-                error!(error = %e, shortcut = TOGGLE_SHORTCUT, "Failed to register global shortcut");
-            } else {
-                info!(shortcut = TOGGLE_SHORTCUT, "Global toggle shortcut registered");
+
+            // Resolve the app data dir once (shared by settings + extensions).
+            let data_dir = app
+                .path()
+                .app_data_dir()
+                .unwrap_or_else(|_| std::path::PathBuf::from("."));
+
+            // Load persisted settings (hotkey, hide-on-blur, theme).
+            let settings_store = Arc::new(SettingsStore::load(data_dir.clone()));
+            let settings = settings_store.get();
+            app.manage(settings_store);
+
+            // Register the global summon/dismiss hotkey from settings.
+            match register_toggle(&handle, &settings.toggle_shortcut) {
+                Ok(()) => info!(shortcut = %settings.toggle_shortcut, "Global toggle shortcut registered"),
+                Err(e) => error!(error = %e, shortcut = %settings.toggle_shortcut, "Failed to register global shortcut"),
             }
 
             // Make the palette overlay the *active* Space instead of living on
@@ -216,11 +239,7 @@ pub fn run() {
                     let app_state = app.state::<AppState>();
                     (app_state.registry.clone(), app_state.gate.clone())
                 };
-                let ext_dir = app
-                    .path()
-                    .app_data_dir()
-                    .unwrap_or_else(|_| std::path::PathBuf::from("."))
-                    .join("extensions");
+                let ext_dir = data_dir.join("extensions");
                 let ext_registry = Arc::new(ExtensionRegistry::new(ext_dir, caps, gate));
                 if let Err(e) = ext_registry.load() {
                     error!(error = %e, "Failed to load extensions");

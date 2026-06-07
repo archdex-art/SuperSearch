@@ -16,6 +16,7 @@ import * as Keyboard from './keyboard.js';
 import * as Preview from './preview.js';
 import * as Agent from './agent.js';
 import * as Extensions from './extensions.js';
+import * as Settings from './settings.js';
 
 /** @type {number} Currently selected result index */
 let selectedIndex = -1;
@@ -53,6 +54,7 @@ export function init() {
   Preview.init(previewPanel);
   Agent.init(agentPanel);
   Extensions.init();
+  Settings.init();
   Keyboard.init();
 
   // Wire search input
@@ -81,7 +83,7 @@ export function init() {
   // Wire keyboard navigation
   Keyboard.registerCallbacks({
     onNavigate: (direction) => {
-      if (Extensions.isOpen()) return;
+      if (Extensions.isOpen() || Settings.isOpen()) return;
       if (currentResults.length === 0) return;
       selectedIndex = Math.max(0, Math.min(currentResults.length - 1, selectedIndex + direction));
       renderResults(resultsPanel);
@@ -92,7 +94,7 @@ export function init() {
     },
 
     onExecute: (withMeta) => {
-      if (Extensions.isOpen()) return;
+      if (Extensions.isOpen() || Settings.isOpen()) return;
       if (selectedIndex >= 0 && selectedIndex < currentResults.length) {
         const result = currentResults[selectedIndex];
         executeResult(result, withMeta, contentArea, agentPanel, modeBadge);
@@ -100,7 +102,11 @@ export function init() {
     },
 
     onDismiss: () => {
-      // The extension manager intercepts Esc first.
+      // Overlays intercept Esc first.
+      if (Settings.isOpen()) {
+        Settings.close();
+        return;
+      }
       if (Extensions.isOpen()) {
         Extensions.close();
         return;

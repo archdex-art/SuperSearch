@@ -40,6 +40,9 @@ let MOCK_EXTENSIONS = [
   },
 ];
 
+// Mutable settings for browser-dev mock mode.
+let MOCK_SETTINGS = { toggle_shortcut: 'Alt+Space', hide_on_blur: true, theme: 'dark' };
+
 // Simple agent intent detection for mock mode
 const AGENT_PATTERNS = [
   /^open\s+/i, /^launch\s+/i, /^start\s+/i, /^quit\s+/i, /^close\s+/i,
@@ -183,6 +186,13 @@ export const Bridge = {
         return [];
 
       case 'execute_extension_action':
+        return null;
+
+      case 'get_settings':
+        return { ...MOCK_SETTINGS };
+
+      case 'update_settings':
+        MOCK_SETTINGS = { ...MOCK_SETTINGS, ...(args.settings || {}) };
         return null;
 
       case 'get_telemetry':
