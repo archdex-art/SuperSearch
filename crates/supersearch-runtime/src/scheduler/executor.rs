@@ -228,12 +228,20 @@ impl SchedulerExecutor {
         }
 
         // 4. Deadline check (~25ns).
-        if desc.is_overdue() {
+        //
+        // Only cancel a task that blew its latency budget *before making any
+        // progress* (`age_ticks == 0` → never polled/yielded). Once a task has
+        // yielded `Pending` it is legitimately awaiting an inner future (e.g.
+        // `spawn_blocking`, I/O) whose wall-clock time is outside its control —
+        // it must be re-polled to completion. Cancelling an in-flight task here
+        // dropped it and its outputs (its oneshot sender), which raced on slower
+        // runners where the inner future outlived the budget (Windows).
+        if desc.age_ticks == 0 && desc.is_overdue() {
             warn!(
                 task_id = %desc.id,
                 priority = %desc.priority,
                 label = desc.provenance.label,
-                "Task overdue before polling — cancelling"
+                "Task overdue before first poll — cancelling"
             );
             desc.cancellation.cancel();
             stats.tasks_cancelled += 1;
@@ -353,15 +361,13 @@ mod tests {
         assert!(completed.load(std::sync::atomic::Ordering::SeqCst));
     }
 
-    // IGNORED: surfaces a real, platform-timing-dependent defect in the
-    // (aspirational, not-yet-load-bearing) scheduler — a task that yields
-    // `Pending` on an inner `spawn_blocking` is intermittently dropped before it
-    // resumes, instead of being retained and re-polled. It passes reliably on
-    // macOS/Linux but races on Windows (the task's oneshot sender is dropped →
-    // RecvError). Every test structure we tried hit a different facet of the
-    // same underlying retention race, so the fix belongs in the scheduler's
-    // task-retention/waker path, not the test. Re-enable once that lands.
-    #[ignore = "scheduler drops a Pending(spawn_blocking) task on Windows — see comment"]
+    // Regression test for the retention defect: a task that yields `Pending` on
+    // an inner `spawn_blocking` must be re-polled to completion, not cancelled.
+    // Previously `process_task`'s overdue check dropped any task past its latency
+    // budget — including one merely *awaiting* an inner future whose wall-clock
+    // time it doesn't control — so on slower runners (Windows) the task and its
+    // oneshot sender were dropped (`RecvError`). The fix exempts in-flight
+    // (already-yielded) tasks from overdue cancellation.
     #[tokio::test]
     async fn scheduler_drives_task_with_awaited_inner_future() {
         // Mirrors how agent_query is scheduled (P5): an enqueued task that
