@@ -365,7 +365,6 @@ mod tests {
         );
 
         let (tx, rx) = tokio::sync::oneshot::channel::<u32>();
-        let sq = queue.clone();
         let task = queue
             .builder(PriorityClass::Interactive)
             .origin("test")
@@ -373,19 +372,27 @@ mod tests {
             .spawn(async move {
                 let v = tokio::task::spawn_blocking(|| 21u32 * 2).await.unwrap();
                 let _ = tx.send(v);
-                // Stop the executor *after* the result is sent — deterministic,
-                // rather than racing a fixed timer against task completion (which
-                // flaked on slower runners and dropped the sender).
-                sq.shutdown();
             });
         queue.enqueue(task);
 
-        executor.run().await;
-
-        let got = tokio::time::timeout(Duration::from_secs(2), rx)
-            .await
-            .expect("scheduler did not drive the task in time")
-            .expect("task dropped its sender");
+        // Drive the executor concurrently with collecting the result, and
+        // resolve as soon as the result arrives via `select!` (NOT `join!`,
+        // which would wait for `run()` to also return and could hang if the
+        // executor never observes shutdown). The inner 5s timeout bounds the
+        // whole test, so a scheduler wakeup quirk can never hang CI again.
+        let sq = queue.clone();
+        let collector = async move {
+            let got = tokio::time::timeout(Duration::from_secs(5), rx)
+                .await
+                .expect("scheduler did not drive the task in time")
+                .expect("task dropped its sender");
+            sq.shutdown();
+            got
+        };
+        let got = tokio::select! {
+            got = collector => got,
+            _ = executor.run() => panic!("executor stopped before the task delivered a result"),
+        };
         assert_eq!(got, 42);
     }
 }
