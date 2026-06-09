@@ -17,7 +17,7 @@
 //! Every platform backend is compiled on every target, so these helpers are
 //! always referenced and never dead regardless of which backend is selected.
 
-use std::io::Write;
+use std::io::{Read, Write};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 use tracing::{debug, error};
@@ -111,7 +111,24 @@ pub(crate) fn run_command(
     let deadline = Instant::now() + timeout;
     loop {
         match child.try_wait() {
-            Ok(Some(_status)) => return finish(child.wait_with_output(), label, capture),
+            Ok(Some(status)) => {
+                // Read the pipes directly rather than calling `wait_with_output()`
+                // after `try_wait()` already reaped the child — the second wait
+                // can intermittently fail with ECHILD ("No child processes").
+                let mut stdout = Vec::new();
+                let mut stderr = Vec::new();
+                if let Some(mut o) = child.stdout.take() {
+                    let _ = o.read_to_end(&mut stdout);
+                }
+                if let Some(mut e) = child.stderr.take() {
+                    let _ = e.read_to_end(&mut stderr);
+                }
+                return finish(
+                    Ok(std::process::Output { status, stdout, stderr }),
+                    label,
+                    capture,
+                );
+            }
             Ok(None) => {
                 if Instant::now() >= deadline {
                     let _ = child.kill();
