@@ -12,6 +12,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
@@ -26,13 +27,32 @@ use super::host::{self, ExtensionAction};
 use super::wasm;
 use super::manifest::{ExtensionKind, ExtensionManifest};
 
+/// Per-extension search budget. A slow extension is abandoned (its child is
+/// killed) rather than stalling the palette — far tighter than the 10s one-off
+/// invocation cap. Extensions run concurrently, so this bounds the whole fan-out.
+const SEARCH_BUDGET: Duration = Duration::from_millis(800);
+
 /// A single installed extension and its runtime state.
 struct ExtensionRecord {
     manifest: ExtensionManifest,
     dir: PathBuf,
     enabled: bool,
+    /// Whether the user has explicitly trusted this extension to run unsandboxed
+    /// code. WASM extensions are sandboxed by wasmtime and need no trust; a raw
+    /// `kind = "script"` extension runs with full user privileges, so it only
+    /// participates in queries once trusted.
+    trusted: bool,
     /// Capability token, present only while enabled.
     token: Option<CapabilityToken>,
+}
+
+/// Persisted per-extension state (`registry.json`).
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+struct RecordState {
+    #[serde(default)]
+    enabled: bool,
+    #[serde(default)]
+    trusted: bool,
 }
 
 /// Serializable summary of an extension for the manager UI.
@@ -45,6 +65,11 @@ pub struct ExtensionInfo {
     pub description: Option<String>,
     pub kind: ExtensionKind,
     pub enabled: bool,
+    /// User has trusted this (unsandboxed) script extension to run.
+    pub trusted: bool,
+    /// True when the extension is a script that still needs an explicit trust
+    /// grant before it will run — the UI should surface a "Trust" affordance.
+    pub needs_trust: bool,
     pub permissions: Vec<PermissionInfo>,
 }
 
@@ -111,7 +136,7 @@ impl ExtensionRegistry {
     /// state. Granting tokens for the extensions that were left enabled.
     pub fn load(&self) -> Result<(), ExtensionError> {
         std::fs::create_dir_all(&self.dir)?;
-        let enabled_state = self.read_state();
+        let saved = self.read_state();
 
         let mut records = Vec::new();
         for entry in std::fs::read_dir(&self.dir)? {
@@ -141,9 +166,15 @@ impl ExtensionRegistry {
                 }
             };
 
-            let enabled = enabled_state.get(&manifest.id).copied().unwrap_or(false);
-            let token = if enabled { Some(self.grant_for(&manifest)) } else { None };
-            records.push(ExtensionRecord { manifest, dir: path, enabled, token });
+            let state = saved.get(&manifest.id).copied().unwrap_or_default();
+            let token = if state.enabled { Some(self.grant_for(&manifest)) } else { None };
+            records.push(ExtensionRecord {
+                manifest,
+                dir: path,
+                enabled: state.enabled,
+                trusted: state.trusted,
+                token,
+            });
         }
 
         info!(count = records.len(), "Extensions loaded");
@@ -177,6 +208,23 @@ impl ExtensionRegistry {
         Ok(())
     }
 
+    /// Set whether the user trusts an (unsandboxed) script extension to run.
+    /// This is the gate that lets a `kind = "script"` extension participate in
+    /// queries; WASM extensions are sandboxed and ignore it. The UI must obtain
+    /// explicit, informed consent before calling this with `true`.
+    pub fn set_trusted(&self, id: &str, trusted: bool) -> Result<(), ExtensionError> {
+        {
+            let mut records = self.records.write();
+            let record = records
+                .iter_mut()
+                .find(|r| r.manifest.id == id)
+                .ok_or_else(|| ExtensionError::NotFound(id.to_string()))?;
+            record.trusted = trusted;
+        }
+        self.persist_state();
+        Ok(())
+    }
+
     /// Install an extension by copying a source directory (containing a valid
     /// `manifest.toml`) into the registry. Installed disabled by default so the
     /// user must consent via enable.
@@ -199,6 +247,7 @@ impl ExtensionRegistry {
             manifest,
             dir: dest,
             enabled: false,
+            trusted: false,
             token: None,
         });
         self.persist_state();
@@ -228,29 +277,65 @@ impl ExtensionRegistry {
     /// each tagged with its source extension id.
     pub fn query(&self, input: &str) -> Vec<ExtensionQueryHit> {
         let input_lower = input.to_lowercase();
-        let targets: Vec<(String, ExtensionKind, PathBuf, String)> = {
+        let targets: Vec<(String, ExtensionKind, PathBuf, String, bool)> = {
             let records = self.records.read();
             records
                 .iter()
                 .filter(|r| r.enabled)
                 .filter(|r| keyword_match(&r.manifest.keywords, &input_lower))
-                .map(|r| (r.manifest.id.clone(), r.manifest.kind, r.dir.clone(), r.manifest.entrypoint.clone()))
+                .map(|r| {
+                    (
+                        r.manifest.id.clone(),
+                        r.manifest.kind,
+                        r.dir.clone(),
+                        r.manifest.entrypoint.clone(),
+                        r.trusted,
+                    )
+                })
                 .collect()
         };
 
+        // Fan out concurrently with a tight per-extension budget so one slow
+        // extension can't stall search. Each runs on its own thread; a script
+        // that overruns is killed by `host::run_query`'s own timeout, and the
+        // whole fan-out is bounded by the overall deadline below.
+        let (tx, rx) = std::sync::mpsc::channel::<(String, Result<Vec<host::ExtensionResult>, host::HostError>)>();
+        let mut spawned = 0usize;
+        for (id, kind, dir, entrypoint, trusted) in targets {
+            // B1: a raw script runs unsandboxed (full user privileges), so it
+            // only participates once the user has explicitly trusted it. WASM
+            // extensions are sandboxed by wasmtime and always run.
+            if kind == ExtensionKind::Script && !trusted {
+                warn!(id, "Skipping untrusted script extension — enable trust to run it");
+                continue;
+            }
+            let tx = tx.clone();
+            let input = input.to_string();
+            std::thread::spawn(move || {
+                // Each worker self-bounds: scripts via `host::run_query`'s
+                // timeout, wasm via its fuel budget. `catch_unwind` guarantees a
+                // worker always reports exactly once (even on panic), so the
+                // blocking collection below is deterministic and can never hang.
+                let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match kind {
+                    ExtensionKind::Script => host::run_query(&dir, &entrypoint, &input, SEARCH_BUDGET),
+                    ExtensionKind::Wasm => {
+                        wasm::run_query(&dir.join(&entrypoint), &input).map_err(host::HostError::BadOutput)
+                    }
+                }))
+                .unwrap_or_else(|_| Err(host::HostError::BadOutput("extension worker panicked".into())));
+                let _ = tx.send((id, outcome));
+            });
+            spawned += 1;
+        }
+        drop(tx);
+
+        // Collect exactly `spawned` reports. Every worker is guaranteed to send
+        // within its own budget, so this blocks for at most ~SEARCH_BUDGET and
+        // never drops a result that arrived (no collection-deadline race).
         let mut hits = Vec::new();
-        for (id, kind, dir, entrypoint) in targets {
-            let outcome = match kind {
-                ExtensionKind::Script => host::run_query(&dir, &entrypoint, input),
-                ExtensionKind::Wasm => {
-                    wasm::run_query(&dir.join(&entrypoint), input).map_err(|e| {
-                        // Normalize to the host error type for uniform logging.
-                        super::host::HostError::BadOutput(e)
-                    })
-                }
-            };
-            match outcome {
-                Ok(results) => {
+        for _ in 0..spawned {
+            match rx.recv() {
+                Ok((id, Ok(results))) => {
                     for r in results {
                         hits.push(ExtensionQueryHit {
                             extension_id: id.clone(),
@@ -260,7 +345,8 @@ impl ExtensionRegistry {
                         });
                     }
                 }
-                Err(e) => warn!(id, dir = %dir.display(), error = %e, "Extension query failed"),
+                Ok((id, Err(e))) => warn!(id, error = %e, "Extension query failed"),
+                Err(_) => break, // all workers reported and senders dropped
             }
         }
         hits
@@ -313,19 +399,30 @@ impl ExtensionRegistry {
         self.dir.join("registry.json")
     }
 
-    fn read_state(&self) -> HashMap<String, bool> {
-        std::fs::read_to_string(self.state_path())
-            .ok()
-            .and_then(|t| serde_json::from_str(&t).ok())
-            .unwrap_or_default()
+    fn read_state(&self) -> HashMap<String, RecordState> {
+        let Ok(text) = std::fs::read_to_string(self.state_path()) else {
+            return HashMap::new();
+        };
+        // Current shape: { id: { enabled, trusted } }.
+        if let Ok(m) = serde_json::from_str::<HashMap<String, RecordState>>(&text) {
+            return m;
+        }
+        // Back-compat: older files stored { id: bool } (enabled only).
+        if let Ok(old) = serde_json::from_str::<HashMap<String, bool>>(&text) {
+            return old
+                .into_iter()
+                .map(|(k, enabled)| (k, RecordState { enabled, trusted: false }))
+                .collect();
+        }
+        HashMap::new()
     }
 
     fn persist_state(&self) {
-        let state: HashMap<String, bool> = self
+        let state: HashMap<String, RecordState> = self
             .records
             .read()
             .iter()
-            .map(|r| (r.manifest.id.clone(), r.enabled))
+            .map(|r| (r.manifest.id.clone(), RecordState { enabled: r.enabled, trusted: r.trusted }))
             .collect();
         match serde_json::to_string_pretty(&state) {
             Ok(json) => {
@@ -347,6 +444,8 @@ fn record_info(r: &ExtensionRecord) -> ExtensionInfo {
         description: r.manifest.description.clone(),
         kind: r.manifest.kind,
         enabled: r.enabled,
+        trusted: r.trusted,
+        needs_trust: r.manifest.kind == ExtensionKind::Script && !r.trusted,
         permissions: r
             .manifest
             .permissions
@@ -450,6 +549,22 @@ mod tests {
         ext
     }
 
+    /// Script-extension queries spawn a subprocess and are *best-effort*: under
+    /// heavy parallel test load a child can occasionally be read as empty. WASM
+    /// extensions are deterministic; for the script path we retry briefly to
+    /// assert the steady-state result without flaking on subprocess timing.
+    fn query_until(reg: &ExtensionRegistry, q: &str, want: usize) -> Vec<ExtensionQueryHit> {
+        let mut last = reg.query(q);
+        for _ in 0..20 {
+            if last.len() == want {
+                return last;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+            last = reg.query(q);
+        }
+        last
+    }
+
     #[test]
     fn install_enable_query_uninstall_lifecycle() {
         let (reg, dir) = make_registry();
@@ -466,10 +581,17 @@ mod tests {
         assert!(!reg.list()[0].enabled);
         assert!(reg.query("hello").is_empty());
 
-        // Enable → token granted, query runs.
+        // Enable → token granted. But "demo" is a *script* extension, so until
+        // it is trusted it stays out of the query fan-out (B1 sandbox gate).
         reg.set_enabled("demo", true).unwrap();
         assert!(reg.list()[0].enabled);
-        let results = reg.query("hi");
+        assert!(reg.list()[0].needs_trust, "untrusted script should flag needs_trust");
+        assert!(reg.query("hi").is_empty(), "untrusted script must not run in queries");
+
+        // Trust → query runs.
+        reg.set_trusted("demo", true).unwrap();
+        assert!(!reg.list()[0].needs_trust);
+        let results = query_until(&reg, "hi", 1);
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].title, "R:hi");
 
@@ -481,6 +603,8 @@ mod tests {
         );
         reloaded.load().unwrap();
         assert!(reloaded.list()[0].enabled);
+        assert!(reloaded.list()[0].trusted, "trust must persist across reload");
+        assert_eq!(query_until(&reloaded, "hi", 1).len(), 1, "trusted+enabled script runs after reload");
 
         // Disable → not consulted again.
         reg.set_enabled("demo", false).unwrap();

@@ -48,6 +48,17 @@ pub fn set_extension_enabled(
     registry.set_enabled(&id, enabled).map_err(|e| e.to_string())
 }
 
+/// Trust (or untrust) an unsandboxed script extension so it may run in queries.
+/// The UI must show an explicit, informed consent dialog before passing `true`.
+#[command]
+pub fn set_extension_trusted(
+    id: String,
+    trusted: bool,
+    registry: tauri::State<'_, Arc<ExtensionRegistry>>,
+) -> Result<(), String> {
+    registry.set_trusted(&id, trusted).map_err(|e| e.to_string())
+}
+
 /// Run a query against all enabled script extensions and return merged results,
 /// each tagged with its source extension id (for action routing).
 #[command]
