@@ -10,6 +10,28 @@ env:
   RUSTFLAGS: "-D warnings"
 
 jobs:
+  # ── Front-end — TypeScript typecheck + Vite build ──────────────────────────
+  # The Rust jobs build `cargo` (not the bundled front-end), so this is the only
+  # gate that catches React/TS type errors and build regressions.
+  frontend:
+    name: Front-end typecheck & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: react-command-palette/package-lock.json
+
+      - name: Install dependencies
+        run: npm --prefix react-command-palette ci
+
+      - name: Typecheck + build (tsc --noEmit && vite build)
+        run: npm --prefix react-command-palette run build
+
   # ── macOS — full Tauri build + tests ───────────────────────────────────────
   build-macos:
     name: Build & test (macOS)
