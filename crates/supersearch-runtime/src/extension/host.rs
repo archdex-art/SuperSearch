@@ -13,8 +13,9 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
-/// Hard cap on how long a script extension may run per query.
-const SCRIPT_TIMEOUT: Duration = Duration::from_secs(10);
+/// Default cap for a one-off (non-search) script invocation. Search fan-out
+/// passes a much tighter budget so a slow extension can't stall the palette.
+pub const SCRIPT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// A single result row returned by an extension.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,7 +55,12 @@ pub enum HostError {
 ///
 /// `dir` is the extension directory; `entrypoint` is the manifest's relative
 /// entrypoint (already validated to stay inside `dir`).
-pub fn run_query(dir: &Path, entrypoint: &str, query: &str) -> Result<Vec<ExtensionResult>, HostError> {
+pub fn run_query(
+    dir: &Path,
+    entrypoint: &str,
+    query: &str,
+    timeout: Duration,
+) -> Result<Vec<ExtensionResult>, HostError> {
     let program = dir.join(entrypoint);
     debug!(program = %program.display(), query, "Running script extension");
 
@@ -72,7 +78,7 @@ pub fn run_query(dir: &Path, entrypoint: &str, query: &str) -> Result<Vec<Extens
     // process — the second wait can intermittently fail with ECHILD ("No child
     // processes"), which previously misreported a non-zero exit as a spawn error
     // (a flaky test on loaded CI runners).
-    let deadline = Instant::now() + SCRIPT_TIMEOUT;
+    let deadline = Instant::now() + timeout;
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => break status,
@@ -81,7 +87,7 @@ pub fn run_query(dir: &Path, entrypoint: &str, query: &str) -> Result<Vec<Extens
                     let _ = child.kill();
                     let _ = child.wait();
                     warn!(program = %program.display(), "Script extension timed out — killed");
-                    return Err(HostError::Timeout(SCRIPT_TIMEOUT));
+                    return Err(HostError::Timeout(timeout));
                 }
                 std::thread::sleep(Duration::from_millis(15));
             }
@@ -134,7 +140,7 @@ mod tests {
             "run.sh",
             "#!/bin/sh\nprintf '[{\"title\":\"Hello %s\",\"subtitle\":\"sub\"}]' \"$1\"\n",
         );
-        let results = run_query(dir.path(), &ep, "world").unwrap();
+        let results = run_query(dir.path(), &ep, "world", SCRIPT_TIMEOUT).unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].title, "Hello world");
         assert_eq!(results[0].subtitle, "sub");
@@ -150,7 +156,7 @@ mod tests {
             "#!/bin/sh\nprintf '[{\"title\":\"%s\"}]' \"$1\"\n",
         );
         let payload = "$(touch pwned); `id`";
-        let results = run_query(dir.path(), &ep, payload).unwrap();
+        let results = run_query(dir.path(), &ep, payload, SCRIPT_TIMEOUT).unwrap();
         assert_eq!(results[0].title, payload);
         assert!(!dir.path().join("pwned").exists(), "injection executed");
     }
@@ -161,7 +167,7 @@ mod tests {
         // SCRIPT_TIMEOUT is 10s; this test would be slow, so just assert the
         // error type via a script that exits non-zero quickly instead.
         let ep = write_script(dir.path(), "fail.sh", "#!/bin/sh\necho oops >&2\nexit 3\n");
-        let err = run_query(dir.path(), &ep, "x").unwrap_err();
+        let err = run_query(dir.path(), &ep, "x", SCRIPT_TIMEOUT).unwrap_err();
         assert!(matches!(err, HostError::NonZeroExit(_)));
     }
 }

@@ -241,6 +241,7 @@ pub fn run() {
             commands::extensions::install_extension,
             commands::extensions::uninstall_extension,
             commands::extensions::set_extension_enabled,
+            commands::extensions::set_extension_trusted,
             commands::extensions::query_extensions,
             commands::extensions::execute_extension_action,
             commands::settings::get_settings,
