@@ -53,6 +53,7 @@ pub fn search_applications(query: &str) -> Vec<SearchResult> {
                 category: "Application".into(),
                 icon: "📱".into(),
                 score,
+                ..Default::default()
             })
         })
         .collect();
@@ -112,6 +113,7 @@ fn make_cmd(id: &str, title: &str, subtitle: &str, icon: &str) -> SearchResult {
         category: "System".into(),
         icon: icon.into(),
         score: 0.0,
+        ..Default::default()
     }
 }
 
@@ -167,6 +169,7 @@ fn paths_to_results(paths: &[&str]) -> Vec<SearchResult> {
                 category: if is_dir { "Folder".into() } else { "File".into() },
                 icon: if is_dir { "📁".into() } else { file_icon(filename) },
                 score: 0.8 - (i as f64 * 0.05),
+                ..Default::default()
             }
         })
         .collect()
