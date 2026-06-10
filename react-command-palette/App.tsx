@@ -9,6 +9,7 @@ import {
   reducedVariants,
 } from "./variants";
 import { invoke, listen, type BackendResult } from "./bridge";
+import { ExtensionManager } from "./ExtensionManager";
 import type { CommandAction } from "./types";
 
 /** A palette row plus how to run it. */
@@ -53,6 +54,7 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [view, setView] = useState<"palette" | "extensions">("palette");
   const [summonKey, setSummonKey] = useState(0); // bumped on each summon → replays entrance
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -92,6 +94,18 @@ export default function App() {
             hide();
           },
         }));
+        // Built-in command to open the extension manager.
+        if (/^(ext|manage|plugin)/i.test(q) || "manage extensions".includes(q.toLowerCase())) {
+          rows.unshift({
+            id: "view:extensions",
+            title: "Manage Extensions",
+            subtitle: "Install, enable, and trust extensions",
+            icon: "🧩",
+            group: "Command",
+            hint: "Open",
+            perform: () => setView("extensions"),
+          });
+        }
         rows.sort((a, b) => (RANK[a.group ?? ""] ?? 99) - (RANK[b.group ?? ""] ?? 99));
         setRows(rows);
         setActiveIndex(0);
@@ -170,12 +184,16 @@ export default function App() {
         initial="hidden"
         animate="visible"
         style={{ willChange: "transform, opacity" }}
-        className="flex h-full w-full flex-col overflow-hidden rounded-[18px] border border-white/15
+        className="relative flex h-full w-full flex-col overflow-hidden rounded-[18px] border border-white/15
                    bg-[hsla(228,18%,12%,0.72)] shadow-[0_28px_70px_-18px_rgba(0,0,0,0.6)]
                    ring-1 ring-inset ring-white/[0.06] backdrop-blur-2xl"
         role="dialog"
         aria-label="SuperSearch"
       >
+        {view === "extensions" ? (
+          <ExtensionManager onClose={() => setView("palette")} />
+        ) : (
+        <>
         {/* Search input */}
         <div className="flex h-[60px] items-center gap-3 border-b border-white/[0.07] px-5">
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-5 w-5 shrink-0 text-white/35" aria-hidden>
@@ -241,6 +259,8 @@ export default function App() {
           <FooterHint k="↵" label="Open" />
           <FooterHint k="esc" label="Close" />
         </div>
+        </>
+        )}
       </motion.div>
     </div>
   );
