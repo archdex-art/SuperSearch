@@ -18,6 +18,11 @@ export interface BackendResult {
   category: string;
   icon: string;
   score: number;
+  /**
+   * For extension results (`category === "Extension"`, id `ext:<id>::<title>`),
+   * the declared action to run via `execute_extension_action`. Absent otherwise.
+   */
+  action?: unknown | null;
 }
 
 /** Extension query hit (mirrors ExtensionQueryHit). */

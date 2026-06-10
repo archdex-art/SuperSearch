@@ -8,7 +8,7 @@ import {
   panelVariants,
   reducedVariants,
 } from "./variants";
-import { invoke, listen, type BackendResult, type ExtensionHit } from "./bridge";
+import { invoke, listen, type BackendResult } from "./bridge";
 import type { CommandAction } from "./types";
 
 /** A palette row plus how to run it. */
@@ -70,11 +70,11 @@ export default function App() {
     }
     const t = setTimeout(async () => {
       try {
-        const [native, ext] = await Promise.all([
-          invoke<BackendResult[]>("search_query", { query: q }),
-          invoke<ExtensionHit[]>("query_extensions", { query: q }).catch(() => [] as ExtensionHit[]),
-        ]);
-        const nativeRows: Row[] = (native ?? []).map((r) => ({
+        // Single source of truth: `search_query` already merges native results
+        // AND enabled extensions, ranked together server-side (B3). Extension
+        // rows carry their action and an `ext:<id>::<title>` id for routing.
+        const results = await invoke<BackendResult[]>("search_query", { query: q });
+        const rows: Row[] = (results ?? []).map((r) => ({
           id: r.id,
           title: r.title,
           subtitle: r.subtitle,
@@ -82,26 +82,18 @@ export default function App() {
           group: r.category,
           hint: actionVerb(r.category),
           perform: async () => {
-            await invoke("execute_action", { request: { action_id: r.id, with_meta: false } });
+            if (r.id.startsWith("ext:") && r.action != null) {
+              // Extension result — dispatch through its capability token.
+              const extId = r.id.slice("ext:".length).split("::")[0];
+              await invoke("execute_extension_action", { id: extId, action: r.action });
+            } else {
+              await invoke("execute_action", { request: { action_id: r.id, with_meta: false } });
+            }
             hide();
           },
         }));
-        const extRows: Row[] = (ext ?? []).map((h, i) => ({
-          id: `ext:${h.extension_id}:${i}`,
-          title: h.title,
-          subtitle: h.subtitle,
-          icon: "🧩",
-          group: "Extension",
-          hint: "Run",
-          perform: async () => {
-            if (h.action) await invoke("execute_extension_action", { id: h.extension_id, action: h.action });
-            hide();
-          },
-        }));
-        const merged = [...nativeRows, ...extRows].sort(
-          (a, b) => (RANK[a.group ?? ""] ?? 99) - (RANK[b.group ?? ""] ?? 99),
-        );
-        setRows(merged);
+        rows.sort((a, b) => (RANK[a.group ?? ""] ?? 99) - (RANK[b.group ?? ""] ?? 99));
+        setRows(rows);
         setActiveIndex(0);
       } catch (e) {
         console.error("[palette] search failed", e);
