@@ -10,6 +10,7 @@ import {
 } from "./variants";
 import { invoke, listen, type BackendResult } from "./bridge";
 import { ExtensionManager } from "./ExtensionManager";
+import { Settings } from "./Settings";
 import type { CommandAction } from "./types";
 
 /** A palette row plus how to run it. */
@@ -54,7 +55,7 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [view, setView] = useState<"palette" | "extensions">("palette");
+  const [view, setView] = useState<"palette" | "extensions" | "settings">("palette");
   const [summonKey, setSummonKey] = useState(0); // bumped on each summon → replays entrance
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -104,6 +105,17 @@ export default function App() {
             group: "Command",
             hint: "Open",
             perform: () => setView("extensions"),
+          });
+        }
+        if (/^(set|pref|config)/i.test(q) || "settings preferences".includes(q.toLowerCase())) {
+          rows.unshift({
+            id: "view:settings",
+            title: "Settings",
+            subtitle: "Shortcut, theme, and behavior",
+            icon: "⚙️",
+            group: "Command",
+            hint: "Open",
+            perform: () => setView("settings"),
           });
         }
         rows.sort((a, b) => (RANK[a.group ?? ""] ?? 99) - (RANK[b.group ?? ""] ?? 99));
@@ -192,6 +204,8 @@ export default function App() {
       >
         {view === "extensions" ? (
           <ExtensionManager onClose={() => setView("palette")} />
+        ) : view === "settings" ? (
+          <Settings onClose={() => setView("palette")} />
         ) : (
         <>
         {/* Search input */}

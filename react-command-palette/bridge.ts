@@ -33,6 +33,13 @@ export interface ExtensionHit {
   action: unknown | null;
 }
 
+/** Persisted app settings (mirrors the Rust settings store). */
+export interface AppSettings {
+  toggle_shortcut: string;
+  hide_on_blur: boolean;
+  theme: "dark" | "light";
+}
+
 /** A requested permission, rendered in the consent dialog. */
 export interface PermissionInfo {
   permission: string;
@@ -109,6 +116,7 @@ function mock(cmd: string, args?: Record<string, unknown>): unknown {
     case "set_extension_enabled":
     case "set_extension_trusted":
     case "uninstall_extension":
+    case "update_settings":
       return null;
     default:
       return null;
