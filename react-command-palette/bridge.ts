@@ -33,6 +33,35 @@ export interface ExtensionHit {
   action: unknown | null;
 }
 
+/** Persisted app settings (mirrors the Rust settings store). */
+export interface AppSettings {
+  toggle_shortcut: string;
+  hide_on_blur: boolean;
+  theme: "dark" | "light";
+}
+
+/** A requested permission, rendered in the consent dialog. */
+export interface PermissionInfo {
+  permission: string;
+  justification: string;
+}
+
+/** Installed-extension summary (mirrors ExtensionInfo). */
+export interface ExtensionInfo {
+  id: string;
+  name: string;
+  version: string;
+  author?: string | null;
+  description?: string | null;
+  kind: "script" | "wasm";
+  enabled: boolean;
+  /** User has trusted this (unsandboxed) script extension to run. */
+  trusted: boolean;
+  /** A script that still needs an explicit trust grant before it will run. */
+  needs_trust: boolean;
+  permissions: PermissionInfo[];
+}
+
 export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (isTauri) return tauriInvoke<T>(cmd, args);
   return mock(cmd, args) as T;
@@ -73,6 +102,22 @@ function mock(cmd: string, args?: Record<string, unknown>): unknown {
       return null;
     case "get_settings":
       return { toggle_shortcut: "Alt+Space", hide_on_blur: true, theme: "dark" };
+    case "list_extensions":
+      return [
+        {
+          id: "ddg", name: "DuckDuckGo", version: "1.0.0", author: "demo",
+          description: "Instant answers", kind: "script", enabled: true,
+          trusted: false, needs_trust: true,
+          permissions: [{ permission: "NetworkConnect", justification: "fetch answers" }],
+        },
+      ];
+    case "install_extension":
+      return "installed-id";
+    case "set_extension_enabled":
+    case "set_extension_trusted":
+    case "uninstall_extension":
+    case "update_settings":
+      return null;
     default:
       return null;
   }
