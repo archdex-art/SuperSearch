@@ -7,7 +7,7 @@
 use tracing::debug;
 
 use super::patterns::{AgentIntent, InfoKind, SystemCommand};
-use super::task_graph::{TaskGraph, TaskNodeKind};
+use super::task_graph::{NodeId, TaskGraph, TaskNodeKind};
 
 /// Compiles classified intents into executable task graphs.
 pub struct TaskPlanner;
@@ -228,18 +228,32 @@ impl TaskPlanner {
             .collect();
         let mut graph = TaskGraph::new(descriptions.join(", "));
 
-        // For multi-step, each step depends on the previous (sequential by default).
-        // Parallel execution can be enabled for independent steps.
-        let mut prev_id = None;
+        // For multi-step, each step depends on the previous (sequential by
+        // default). A step's own sub-graph may carry internal dependency
+        // edges (e.g. a future multi-node plan) — those are remapped and
+        // preserved rather than discarded, so the flattened graph never
+        // silently loses a dependency the sub-plan required.
+        let mut prev_last_id: Option<NodeId> = None;
         for intent in intents {
             let sub_graph = self.plan(intent);
-            for node in sub_graph.nodes {
-                let id = graph.add_node(node.label, node.kind);
-                if let Some(prev) = prev_id {
-                    graph.add_edge(prev, id);
-                }
-                prev_id = Some(id);
+            if sub_graph.nodes.is_empty() {
+                continue;
             }
+
+            let id_map: Vec<NodeId> = sub_graph
+                .nodes
+                .iter()
+                .map(|node| graph.add_node(node.label.clone(), node.kind.clone()))
+                .collect();
+
+            for edge in &sub_graph.edges {
+                graph.add_edge(id_map[edge.prerequisite], id_map[edge.dependent]);
+            }
+
+            if let Some(prev) = prev_last_id {
+                graph.add_edge(prev, id_map[0]);
+            }
+            prev_last_id = id_map.last().copied();
         }
 
         graph

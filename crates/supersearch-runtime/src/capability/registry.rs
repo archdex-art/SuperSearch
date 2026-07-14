@@ -61,15 +61,14 @@ impl Default for CapabilityRegistry {
 }
 
 impl CapabilityRegistry {
-    /// Create a new registry with a randomly generated kernel key.
     pub fn new() -> Self {
-        // In production, use `rand::rngs::OsRng` or similar CSPRNG.
-        // For now, use a deterministic key derived from boot time for
-        // reproducibility during testing.
+        // A fresh, unpredictable key per boot. Capability IDs are derived from
+        // this key (see `CapabilityToken::new`); a fixed, compiled-in key would
+        // let anything that can execute in-process precompute IDs for grants it
+        // never received, defeating the "unforgeable" guarantee the token
+        // system advertises.
         let mut key = [0u8; 32];
-        // BLAKE3 hash of a seed — in production replace with OsRng::fill_bytes.
-        let hash = blake3::hash(b"supersearch-runtime-capability-key-seed");
-        key.copy_from_slice(hash.as_bytes());
+        getrandom::getrandom(&mut key).expect("OS CSPRNG unavailable — cannot generate capability key");
 
         Self {
             grants: DashMap::with_capacity(256),

@@ -37,6 +37,8 @@ serde_json = "1.0"
 quanta = "0.12"
 # Lock-free concurrent data structures
 dashmap = "6.1"
+# Secure random kernel key for capability tokens
+getrandom = "0.2"
 
 [dev-dependencies]
 tokio-test = "0.4"

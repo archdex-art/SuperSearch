@@ -331,7 +331,7 @@ impl AgentExecutor {
 }
 
 /// Minimal percent-encoding for query strings (RFC 3986 unreserved set kept).
-fn percent_encode(input: &str) -> String {
+pub(crate) fn percent_encode(input: &str) -> String {
     let mut out = String::with_capacity(input.len() * 3);
     for byte in input.bytes() {
         match byte {

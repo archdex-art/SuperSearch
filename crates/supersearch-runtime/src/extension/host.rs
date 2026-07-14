@@ -8,6 +8,7 @@
 use std::io::Read;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -73,7 +74,17 @@ pub fn run_query(
 
     let mut child = cmd.spawn().map_err(|e| HostError::Spawn(e.to_string()))?;
 
-    // Poll for exit with a deadline, then read the child's pipes directly.
+    // Drain stdout/stderr on background threads concurrently with the poll
+    // loop below. Without this, a script that writes more than the OS pipe
+    // buffer (commonly 64 KiB) before exiting blocks on its own `write()`
+    // waiting for us to read — but the loop only calls `try_wait` (it never
+    // reads the pipes), so any legitimately-larger-but-well-behaved result
+    // set would always stall for the *entire* timeout and then be discarded,
+    // instead of completing quickly.
+    let stdout_reader = child.stdout.take().map(spawn_reader);
+    let stderr_reader = child.stderr.take().map(spawn_reader);
+
+    // Poll for exit with a deadline, then join the reader threads.
     // Do NOT call `wait_with_output()` after `try_wait()` has already reaped the
     // process — the second wait can intermittently fail with ECHILD ("No child
     // processes"), which previously misreported a non-zero exit as a spawn error
@@ -95,15 +106,12 @@ pub fn run_query(
         }
     };
 
-    // The process has exited, so its output sits in the pipe buffers; read it.
-    let mut stdout = String::new();
-    let mut stderr = String::new();
-    if let Some(mut out) = child.stdout.take() {
-        let _ = out.read_to_string(&mut stdout);
-    }
-    if let Some(mut err) = child.stderr.take() {
-        let _ = err.read_to_string(&mut stderr);
-    }
+    // The process has exited; the reader threads finish (pipes hit EOF) and
+    // hand back whatever they collected.
+    let stdout_bytes = join_reader(stdout_reader);
+    let stderr_bytes = join_reader(stderr_reader);
+    let stdout = String::from_utf8_lossy(&stdout_bytes).into_owned();
+    let stderr = String::from_utf8_lossy(&stderr_bytes).into_owned();
 
     if !status.success() {
         return Err(HostError::NonZeroExit(stderr.trim().to_string()));
@@ -115,6 +123,22 @@ pub fn run_query(
     }
     serde_json::from_str::<Vec<ExtensionResult>>(trimmed)
         .map_err(|e| HostError::BadOutput(e.to_string()))
+}
+
+/// Spawn a background thread that reads a pipe to completion. Used to drain
+/// a child's stdout/stderr concurrently with the deadline-bounded poll loop.
+fn spawn_reader(mut pipe: impl Read + Send + 'static) -> JoinHandle<Vec<u8>> {
+    std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = pipe.read_to_end(&mut buf);
+        buf
+    })
+}
+
+/// Join a reader thread spawned by [`spawn_reader`], discarding the bytes if
+/// the thread panicked.
+fn join_reader(handle: Option<JoinHandle<Vec<u8>>>) -> Vec<u8> {
+    handle.and_then(|h| h.join().ok()).unwrap_or_default()
 }
 
 // These tests build `#!/bin/sh` script extensions and `chmod +x` them, so they
@@ -169,5 +193,30 @@ mod tests {
         let ep = write_script(dir.path(), "fail.sh", "#!/bin/sh\necho oops >&2\nexit 3\n");
         let err = run_query(dir.path(), &ep, "x", SCRIPT_TIMEOUT).unwrap_err();
         assert!(matches!(err, HostError::NonZeroExit(_)));
+    }
+
+    #[test]
+    fn large_stdout_does_not_stall_until_timeout() {
+        // Regression: stdout/stderr were only read *after* the child exited, so
+        // a script writing more than the OS pipe buffer (commonly 64 KiB)
+        // before exiting would block on its own `write()` — the poll loop only
+        // called `try_wait` and never drained the pipes, so any legitimately
+        // large-but-well-behaved result set always stalled for the full
+        // timeout and was then discarded instead of returning promptly.
+        let dir = tempfile::tempdir().unwrap();
+        // Emit a JSON array with ~2000 rows (comfortably over 64 KiB) then exit.
+        let ep = write_script(
+            dir.path(),
+            "big.sh",
+            "#!/bin/sh\nprintf '['\nfor i in $(seq 1 2000); do\n  [ \"$i\" -gt 1 ] && printf ','\n  printf '{\"title\":\"row-%04d-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\"}' \"$i\"\ndone\nprintf ']'\n",
+        );
+        let start = std::time::Instant::now();
+        let results = run_query(dir.path(), &ep, "x", Duration::from_secs(5)).unwrap();
+        assert_eq!(results.len(), 2000);
+        assert!(
+            start.elapsed() < Duration::from_secs(2),
+            "should complete almost immediately, not stall until the timeout: {:?}",
+            start.elapsed()
+        );
     }
 }

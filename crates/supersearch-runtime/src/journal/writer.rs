@@ -17,6 +17,7 @@
 
 use std::path::{Path, PathBuf};
 
+use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info};
 
@@ -45,6 +46,10 @@ struct Segment {
     path: PathBuf,
     /// Current write offset within the segment.
     write_offset: usize,
+    /// Bytes already persisted to disk (via `flush`). Only `buffer[flushed_offset..write_offset]`
+    /// needs to be written on the next flush — never the whole buffer, or flushing
+    /// after every entry would cost O(n^2) disk I/O to fill one segment.
+    flushed_offset: usize,
     /// Maximum size of this segment.
     capacity: usize,
     /// The backing buffer. In production this would be an mmap region;
@@ -64,6 +69,7 @@ impl Segment {
         Self {
             path,
             write_offset: 0,
+            flushed_offset: 0,
             capacity,
             buffer: Vec::with_capacity(capacity),
             first_sequence: None,
@@ -257,7 +263,9 @@ impl JournalWriter {
 
     /// Seal the active segment and create a new one.
     async fn rotate_segment(&mut self) -> Result<(), WriterError> {
-        // Seal the current segment.
+        // Persist any bytes not yet flushed before sealing.
+        self.flush().await?;
+
         self.active_segment.seal();
         let sealed_path = self.active_segment.path.clone();
         info!(
@@ -266,9 +274,6 @@ impl JournalWriter {
                       self.active_segment.first_sequence.unwrap_or(0) + 1,
             "Segment sealed"
         );
-
-        // Persist sealed segment to disk.
-        tokio::fs::write(&sealed_path, &self.active_segment.buffer).await?;
         self.sealed_segments.push(sealed_path);
 
         // Create new segment.
@@ -281,16 +286,31 @@ impl JournalWriter {
         Ok(())
     }
 
-    /// Flush the active segment to disk.
+    /// Flush unpersisted bytes of the active segment to disk.
+    ///
+    /// Appends only the delta since the last flush (`buffer[flushed_offset..write_offset]`)
+    /// rather than rewriting the whole segment buffer — the segment can grow up to
+    /// `segment_capacity` (default 64 MiB), so re-writing it from byte 0 on every
+    /// flush (which happens whenever the writer catches up with the channel, i.e.
+    /// potentially after every single entry) would cost O(n^2) total disk I/O to
+    /// fill one segment.
     async fn flush(&mut self) -> Result<(), WriterError> {
-        if self.active_segment.write_offset > 0 {
-            tokio::fs::write(
-                &self.active_segment.path,
-                &self.active_segment.buffer,
-            ).await?;
+        let seg = &mut self.active_segment;
+        if seg.write_offset > seg.flushed_offset {
+            let delta = &seg.buffer[seg.flushed_offset..seg.write_offset];
+            let mut file = tokio::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&seg.path)
+                .await?;
+            file.write_all(delta).await?;
+            file.flush().await?;
+            let flushed_bytes = delta.len();
+            seg.flushed_offset = seg.write_offset;
             info!(
-                path = %self.active_segment.path.display(),
-                bytes = self.active_segment.write_offset,
+                path = %seg.path.display(),
+                bytes = flushed_bytes,
+                total = seg.write_offset,
                 "Flushed active segment"
             );
         }

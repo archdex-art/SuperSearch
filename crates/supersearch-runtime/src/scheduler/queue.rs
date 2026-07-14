@@ -5,6 +5,7 @@
 //! `crossbeam_queue::ArrayQueue` (bounded, allocation-free after init) for
 //! predictable latency; lower priorities use `SegQueue` (unbounded, lock-free).
 
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
 use crossbeam_queue::{ArrayQueue, SegQueue};
 use parking_lot::Mutex;
@@ -70,8 +71,12 @@ pub struct MultiQueue {
 
     /// Promotion staging area: tasks promoted from lower queues are moved
     /// here to avoid re-scanning the entire queue. Protected by a Mutex
-    /// because promotions are rare (starvation path only).
-    promoted: Mutex<Vec<TaskHandle>>,
+    /// because promotions are rare (starvation path only). FIFO (`VecDeque`)
+    /// so the task that has been starved longest — the first one promoted —
+    /// is also the first one serviced; a `Vec` used as a LIFO stack here
+    /// would service the *most recently* promoted task first, inverting the
+    /// fairness guarantee promotion exists to provide.
+    promoted: Mutex<VecDeque<TaskHandle>>,
 
     /// Global tick counter for starvation aging.
     tick_counter: AtomicU64,
@@ -93,7 +98,7 @@ impl MultiQueue {
             user_blocking: SegQueue::new(),
             background: SegQueue::new(),
             idle: SegQueue::new(),
-            promoted: Mutex::new(Vec::with_capacity(16)),
+            promoted: Mutex::new(VecDeque::with_capacity(16)),
             tick_counter: AtomicU64::new(0),
             class_tokens,
             shutdown_token,
@@ -131,7 +136,7 @@ impl MultiQueue {
         // 1. Check promoted tasks first (starvation prevention takes priority).
         {
             let mut promoted = self.promoted.lock();
-            if let Some(handle) = promoted.pop() {
+            if let Some(handle) = promoted.pop_front() {
                 return Some(handle);
             }
         }
@@ -176,7 +181,7 @@ impl MultiQueue {
             // Recompute deadline with new priority's budget
             handle.descriptor.deadline_at =
                 handle.descriptor.provenance.created_at + new_priority.latency_budget();
-            self.promoted.lock().push(handle);
+            self.promoted.lock().push_back(handle);
         }
     }
 
@@ -204,4 +209,34 @@ impl MultiQueue {
 
 impl Default for MultiQueue {
     fn default() -> Self { Self::new() }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::scheduler::priority::PriorityClass;
+
+    #[test]
+    fn promoted_tasks_are_serviced_fifo_oldest_first() {
+        // Regression: the promotion staging area was a `Vec` used as a LIFO
+        // stack (`push`/`pop`), so the *most recently* promoted task was
+        // serviced first — inverting the fairness guarantee starvation
+        // promotion exists to provide (the longest-starved task should run
+        // first).
+        let queue = MultiQueue::new();
+
+        let a = queue.builder(PriorityClass::Idle).origin("test").label("a").spawn(async {});
+        let b = queue.builder(PriorityClass::Idle).origin("test").label("b").spawn(async {});
+        let a_id = a.descriptor.id;
+        let b_id = b.descriptor.id;
+
+        // `a` starves and gets promoted first, then `b`.
+        queue.promote(a);
+        queue.promote(b);
+
+        let first = queue.dequeue().expect("first promoted task");
+        let second = queue.dequeue().expect("second promoted task");
+        assert_eq!(first.descriptor.id, a_id, "the longest-starved task must be serviced first");
+        assert_eq!(second.descriptor.id, b_id);
+    }
 }

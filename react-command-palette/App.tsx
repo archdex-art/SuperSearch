@@ -68,12 +68,17 @@ export default function App() {
       setActiveIndex(0);
       return;
     }
+    // Guards the async response below: cleared whenever this effect re-runs
+    // (a newer keystroke) before the in-flight `invoke` resolves, so a slower
+    // stale response can never clobber a faster, newer one's rows.
+    let cancelled = false;
     const t = setTimeout(async () => {
       try {
         // Single source of truth: `search_query` already merges native results
         // AND enabled extensions, ranked together server-side (B3). Extension
         // rows carry their action and an `ext:<id>::<title>` id for routing.
         const results = await invoke<BackendResult[]>("search_query", { query: q });
+        if (cancelled) return;
         const rows: Row[] = (results ?? []).map((r) => ({
           id: r.id,
           title: r.title,
@@ -96,25 +101,43 @@ export default function App() {
         setRows(rows);
         setActiveIndex(0);
       } catch (e) {
+        if (cancelled) return;
         console.error("[palette] search failed", e);
         setRows([]);
       }
     }, 60);
-    return () => clearTimeout(t);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, [query, hide]);
 
   // Summon: clear + refocus + replay entrance when the backend emits reset.
   useEffect(() => {
     inputRef.current?.focus();
     let un: undefined | (() => void);
+    // If the component unmounts before `listen` resolves, `un` is still
+    // undefined when the cleanup below runs — the listener registered
+    // moments later would otherwise never be unregistered. `cancelled`
+    // makes the `.then` unlisten immediately instead of stashing the handle.
+    let cancelled = false;
     listen("supersearch://reset", () => {
       setQuery("");
       setRows([]);
       setActiveIndex(0);
       setSummonKey((k) => k + 1);
       requestAnimationFrame(() => inputRef.current?.focus());
-    }).then((fn) => (un = fn));
-    return () => un?.();
+    }).then((fn) => {
+      if (cancelled) {
+        fn();
+      } else {
+        un = fn;
+      }
+    });
+    return () => {
+      cancelled = true;
+      un?.();
+    };
   }, []);
 
   // Group into contiguous sections; assign each row its global display index.
