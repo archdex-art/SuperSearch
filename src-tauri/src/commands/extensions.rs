@@ -70,11 +70,19 @@ pub fn query_extensions(
 }
 
 /// Execute an extension result-action (mediated by the extension's token).
+///
+/// Offloaded to a blocking thread: an extension action can spawn a subprocess
+/// (e.g. `open`), and a plain (non-`async`) Tauri command runs synchronously
+/// on the IPC caller's thread (the WKWebView main thread on macOS), which
+/// would freeze the window until the action finished.
 #[command]
-pub fn execute_extension_action(
+pub async fn execute_extension_action(
     id: String,
     action: ExtensionAction,
     registry: tauri::State<'_, Arc<ExtensionRegistry>>,
 ) -> Result<(), String> {
-    registry.execute_action(&id, &action).map_err(|e| e.to_string())
+    let registry = registry.inner().clone();
+    tokio::task::spawn_blocking(move || registry.execute_action(&id, &action).map_err(|e| e.to_string()))
+        .await
+        .map_err(|e| format!("extension action task panicked: {e}"))?
 }
