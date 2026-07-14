@@ -4,6 +4,8 @@
 
 SuperSearch is not just another launcher or command palette. It is a fundamental evolution of how you interact with your operating system. Traditional launchers (like Raycast or Alfred) act as search bars with extensions. SuperSearch acts as an **Intent-Driven Runtime Kernel** that understands natural language, synthesizes multi-step execution graphs, and orchestrates actions autonomously across your local system environment.
 
+[Documentation](docs/README.md) · [Roadmap](ROADMAP.md) · [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [Releases](https://github.com/archdex-art/SuperSearch/releases)
+
 ---
 
 ## 🌟 Core Philosophy & Features
@@ -170,3 +172,8 @@ The capability system (`capability/`) and the append-only journal (`journal/`) a
 ## 🛠️ Contributing
 
 When contributing to the runtime kernel, ensure that new `AgentIntent` additions are mapped properly through `TaskPlanner` to guarantee safe execution limits. Run `cargo build --workspace` to ensure both the Tauri app and the Runtime compile cleanly.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, PR expectations, and
+code conventions, and [docs/](docs/README.md) for the detailed architecture,
+usage, extension, and security reference. Planned work lives in
+[ROADMAP.md](ROADMAP.md); released versions in [CHANGELOG.md](CHANGELOG.md).
