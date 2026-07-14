@@ -19,6 +19,7 @@
 
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 use tracing::{debug, error};
 
@@ -97,14 +98,26 @@ pub(crate) fn run_command(
         Err(e) => return err(label, e),
     };
 
-    // Write stdin (if any) and close it so the child observes EOF.
+    // Drain stdout/stderr on background threads so a child that fills its
+    // pipe buffer (OS default is commonly 64 KiB) before exiting can never
+    // block this thread — the poll loop below only calls `try_wait`, which
+    // never reads the pipes, so an undrained child would otherwise block on
+    // its own `write()` until the timeout kills it, silently discarding all
+    // output that overflowed the buffer.
+    let stdout_reader = child.stdout.take().map(spawn_reader);
+    let stderr_reader = child.stderr.take().map(spawn_reader);
+
+    // Feed stdin (if any) on a background thread for the same reason: a slow
+    // child, or a payload bigger than the OS pipe buffer, must not block this
+    // thread past the deadline below — that would defeat the entire purpose
+    // of this function (bounding a hung helper process).
     if let Some(data) = input {
         if let Some(mut stdin) = child.stdin.take() {
-            if let Err(e) = stdin.write_all(data.as_bytes()) {
-                let _ = child.kill();
-                let _ = child.wait();
-                return err(label, e);
-            }
+            let data = data.to_owned();
+            std::thread::spawn(move || {
+                let _ = stdin.write_all(data.as_bytes());
+                // `stdin` drops here, closing the pipe so the child sees EOF.
+            });
         }
     }
 
@@ -112,17 +125,8 @@ pub(crate) fn run_command(
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
-                // Read the pipes directly rather than calling `wait_with_output()`
-                // after `try_wait()` already reaped the child — the second wait
-                // can intermittently fail with ECHILD ("No child processes").
-                let mut stdout = Vec::new();
-                let mut stderr = Vec::new();
-                if let Some(mut o) = child.stdout.take() {
-                    let _ = o.read_to_end(&mut stdout);
-                }
-                if let Some(mut e) = child.stderr.take() {
-                    let _ = e.read_to_end(&mut stderr);
-                }
+                let stdout = join_reader(stdout_reader);
+                let stderr = join_reader(stderr_reader);
                 return finish(
                     Ok(std::process::Output { status, stdout, stderr }),
                     label,
@@ -147,6 +151,23 @@ pub(crate) fn run_command(
             Err(e) => return err(label, e),
         }
     }
+}
+
+/// Spawn a background thread that reads a pipe to completion, returning a
+/// handle to join for the collected bytes. Used to drain a child's stdout /
+/// stderr concurrently with the deadline-bounded poll loop in `run_command`.
+fn spawn_reader(mut pipe: impl Read + Send + 'static) -> JoinHandle<Vec<u8>> {
+    std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = pipe.read_to_end(&mut buf);
+        buf
+    })
+}
+
+/// Join a reader thread spawned by [`spawn_reader`], discarding the bytes if
+/// the thread panicked (never surfaced past output capture).
+fn join_reader(handle: Option<JoinHandle<Vec<u8>>>) -> Vec<u8> {
+    handle.and_then(|h| h.join().ok()).unwrap_or_default()
 }
 
 /// Normalize a completed `Command::output()` into a [`StepResult`].
@@ -220,5 +241,30 @@ mod tests {
         assert!(!result.success);
         assert!(result.error.unwrap_or_default().contains("Timed out"));
         assert!(start.elapsed() < Duration::from_secs(5), "did not honor the deadline");
+    }
+
+    #[test]
+    fn large_output_does_not_block_on_a_full_pipe() {
+        // Regression: stdout/stderr were only read *after* `try_wait` reported
+        // exit, so a child writing more than the OS pipe buffer (commonly
+        // 64 KiB) before exiting would block on its own `write()` — and since
+        // the poll loop never drained the pipes, it would always stall for the
+        // entire timeout and then be killed, silently discarding the output.
+        #[cfg(not(windows))]
+        let cmd = {
+            let mut c = Command::new("sh");
+            // ~200 KiB of stdout, well past a 64 KiB pipe buffer, then exit.
+            c.args(["-c", "yes A | head -c 200000"]);
+            c
+        };
+        #[cfg(windows)]
+        let cmd = {
+            let mut c = Command::new("powershell");
+            c.args(["-NoProfile", "-Command", "'A' * 200000"]);
+            c
+        };
+        let result = run_command(cmd, None, "big-output", true, Duration::from_secs(5));
+        assert!(result.success, "process should complete well within the deadline: {:?}", result.error);
+        assert!(result.output.len() >= 100_000, "expected large output to be captured, got {} bytes", result.output.len());
     }
 }

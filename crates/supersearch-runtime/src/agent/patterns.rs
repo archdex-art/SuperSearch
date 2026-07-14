@@ -7,6 +7,8 @@
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
+use super::executor::percent_encode;
+
 // ─── Intent Taxonomy ─────────────────────────────────────────────────
 
 /// Classified user intent extracted from a natural-language query.
@@ -291,13 +293,18 @@ impl PatternEngine {
             if lower.contains(sep) {
                 let parts: Vec<&str> = lower.splitn(10, sep).collect();
                 if parts.len() >= 2 && parts.iter().all(|p| !p.trim().is_empty()) {
-                    // Get corresponding original-case parts.
-                    let orig_parts: Vec<&str> = original.splitn(10, |_: char| false).collect();
-                    let _ = orig_parts; // We'll use lower-case parts for classification.
-
+                    // Recover each part's original-case text (from `original`)
+                    // instead of classifying the already-lowercased split —
+                    // otherwise every entity a sub-intent extracts (file
+                    // paths, search text, app names) loses its case, breaking
+                    // case-sensitive paths and corrupting display text.
                     let mut intents: Vec<AgentIntent> = parts
                         .iter()
-                        .map(|part| self.classify_single(part.trim(), part.trim()))
+                        .map(|part| {
+                            let lower_part = part.trim();
+                            let orig_part = extract_entity(original, lower_part);
+                            self.classify_single(&orig_part, lower_part)
+                        })
                         .collect();
 
                     let classified_count = intents.iter()
@@ -312,7 +319,7 @@ impl PatternEngine {
                                 let is_browser = app_name.contains("Chrome") || app_name.contains("Brave") || app_name.contains("Safari") || app_name.contains("Edge") || app_name.contains("Firefox");
                                 if is_browser {
                                     if let AgentIntent::WebSearch { query } | AgentIntent::FindFiles { query } = &next_intent {
-                                        let url = format!("https://google.com/search?q={}", query.replace(" ", "+"));
+                                        let url = format!("https://google.com/search?q={}", percent_encode(query));
                                         args.push(url);
                                         intents[i + 1] = AgentIntent::Unknown { raw_query: "".to_string() };
                                     }
@@ -427,6 +434,41 @@ mod tests {
         match engine.classify("find budget.xlsx") {
             AgentIntent::FindFiles { query } => assert_eq!(query, "budget.xlsx"),
             other => panic!("Expected FindFiles, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn multi_step_preserves_file_path_case() {
+        // Regression: `try_multi_step` previously classified each split part
+        // using the *lowercased* text as both the "original" and "lower"
+        // argument, so any sub-intent that recovers original-case text via
+        // `extract_entity` (e.g. a case-sensitive file path) got permanently
+        // lowercased.
+        let engine = PatternEngine::new();
+        match engine.classify("open /Users/Bob/Report.PDF and switch to Chrome") {
+            AgentIntent::MultiStep { intents } => match &intents[0] {
+                AgentIntent::OpenFile { path } => assert_eq!(path, "/Users/Bob/Report.PDF"),
+                other => panic!("Expected OpenFile, got {:?}", other),
+            },
+            other => panic!("Expected MultiStep, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn multi_step_browser_search_fold_percent_encodes_special_characters() {
+        // Regression: folding a WebSearch/FindFiles step into a preceding
+        // browser launch built the URL with `.replace(" ", "+")` only, so
+        // reserved URL characters (`&`, `%`, `#`, …) reached the query string
+        // unescaped and could truncate or corrupt the search.
+        let engine = PatternEngine::new();
+        match engine.classify("open chrome and search for cats & dogs 50%") {
+            AgentIntent::LaunchApp { args, .. } => {
+                let url = args.last().expect("expected a folded search URL arg");
+                assert!(url.contains("%26"), "'&' must be percent-encoded, got {url}");
+                assert!(url.contains("%25"), "'%' must be percent-encoded, got {url}");
+                assert!(!url.contains(' '), "URL must not contain a raw space, got {url}");
+            }
+            other => panic!("Expected LaunchApp with a folded search URL, got {:?}", other),
         }
     }
 }

@@ -6,7 +6,7 @@
 //!
 //! | Primitive            | Tool                                             |
 //! |----------------------|--------------------------------------------------|
-//! | open path / URL      | `explorer` (files) / `start` via cmd (URLs)      |
+//! | open path / URL      | `explorer` (both — no shell involved)            |
 //! | launch app           | `explorer` (resolves .lnk and .exe)              |
 //! | file search          | `where /r %USERPROFILE% *query*`                 |
 //! | clipboard read       | PowerShell `Get-Clipboard`                       |
@@ -48,9 +48,16 @@ impl PlatformBackend for WindowsBackend {
     }
 
     fn open_url(&self, url: &str, label: &str, timeout: Duration) -> StepResult {
-        // `cmd /c start ""  <url>` is the portable Windows "open URL" idiom.
-        // The empty-string first arg is the window title (required by start).
-        exec::run_argv("cmd", &["/c", "start", "", url], label, timeout)
+        // `cmd /c start` is NOT safe here: Windows has no real argv at the OS
+        // level, so `cmd.exe` re-parses its whole `/c` operand as a command
+        // line and honors `&`/`|` command separators even in an argument Rust
+        // considers "already quoted" — an unquoted `&`/`|` in the URL (e.g. a
+        // plain query string like `?a=1&b=2`, or a crafted payload) reaches
+        // cmd's own parser and can chain a second command. `explorer` opens a
+        // bare URL via the registered protocol handler with no shell involved
+        // at all, so it's inert to shell metacharacters — the same tool this
+        // backend already uses for `open_path`.
+        exec::run_argv("explorer", &[url], label, timeout)
     }
 
     fn find_files(&self, query: &str, label: &str, timeout: Duration) -> StepResult {

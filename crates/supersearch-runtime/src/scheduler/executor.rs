@@ -157,14 +157,26 @@ impl SchedulerExecutor {
             let tick_start = Instant::now();
             let mut stats = TickStats::default();
 
-            // Process up to max_tasks_per_tick tasks in this tick.
+            // Process up to max_tasks_per_tick tasks in this tick. Pending
+            // tasks are buffered in `requeue` rather than enqueued immediately
+            // (see `process_task`) so a task that's still Pending can't loop
+            // straight back through `dequeue()` and get hot-polled again
+            // within the *same* tick — with only one task in the queue, that
+            // alone was enough to re-poll it up to `max_tasks_per_tick` times
+            // per tick despite the outer per-tick park fix.
+            let mut requeue: Vec<TaskHandle> = Vec::new();
             for _ in 0..self.config.max_tasks_per_tick {
                 let task = match self.queue.dequeue() {
                     Some(t) => t,
                     None => break, // All queues empty
                 };
 
-                self.process_task(task, &mut stats).await;
+                if let Some(pending) = self.process_task(task, &mut stats).await {
+                    requeue.push(pending);
+                }
+            }
+            for task in requeue {
+                self.queue.enqueue(task);
             }
 
             // Advance aging counters.
@@ -177,11 +189,26 @@ impl SchedulerExecutor {
                 trace!(?stats, "Tick complete");
             }
 
-            // If no work was done, park until new tasks arrive or timeout.
-            if stats.tasks_polled == 0 {
+            // Park only when nothing in this tick made real forward progress —
+            // an empty queue, or every dequeued task is still legitimately
+            // pending on inner async work (e.g. `spawn_blocking`). Those tasks'
+            // wakers all resolve to `self.notify` (see `futures_waker` below),
+            // so parking here is safe: we wake the instant one of them actually
+            // has progress to report, instead of hot-spinning a full CPU core
+            // re-polling futures whose state hasn't changed. Previously this
+            // branched on `tasks_polled == 0`, so any tick that merely
+            // re-polled-and-requeued a still-pending task (e.g. every tick of
+            // a long-running `agent_query`) fell into the `yield_now` arm,
+            // which returns near-instantly — pinning a CPU core for the
+            // entire duration of any in-flight agent action.
+            let made_progress = stats.tasks_completed > 0
+                || stats.tasks_cancelled > 0
+                || stats.tasks_promoted > 0;
+
+            if !made_progress {
                 tokio::select! {
                     _ = self.notify.notified() => {
-                        // New task enqueued — loop immediately.
+                        // A task's real waker fired — loop immediately.
                     }
                     _ = tokio::time::sleep(self.config.idle_sleep) => {
                         // Periodic wakeup to check shutdown token.
@@ -199,22 +226,24 @@ impl SchedulerExecutor {
         }
     }
 
-    /// Process a single dequeued task.
-    async fn process_task(&mut self, mut task: TaskHandle, stats: &mut TickStats) {
+    /// Process a single dequeued task. Returns `Some(task)` when the task
+    /// polled `Pending` and must be re-enqueued by the caller (deferred so it
+    /// isn't immediately visible to this tick's remaining `dequeue()` calls).
+    async fn process_task(&mut self, mut task: TaskHandle, stats: &mut TickStats) -> Option<TaskHandle> {
         let desc = &task.descriptor;
 
         // 1. Cancellation check (< 1ns).
         if desc.cancellation.is_cancelled() {
             stats.tasks_cancelled += 1;
             trace!(task_id = %desc.id, "Task already cancelled — skipping");
-            return;
+            return None;
         }
 
         // 2. Starvation promotion check.
         if desc.should_promote() {
             stats.tasks_promoted += 1;
             self.queue.promote(task);
-            return;
+            return None;
         }
 
         // 3. Fast-path bypass for Critical tasks.
@@ -245,7 +274,7 @@ impl SchedulerExecutor {
             );
             desc.cancellation.cancel();
             stats.tasks_cancelled += 1;
-            return;
+            return None;
         }
 
         // 5. Poll the future.
@@ -255,7 +284,7 @@ impl SchedulerExecutor {
             Some(f) => f,
             None => {
                 error!(task_id = %desc.id, "Task future already consumed — double-poll bug");
-                return;
+                return None;
             }
         };
 
@@ -276,14 +305,16 @@ impl SchedulerExecutor {
                     elapsed_us = task.descriptor.provenance.created_at.elapsed().as_micros() as u64,
                     "Task completed"
                 );
+                None
             }
             Poll::Pending => {
                 stats.tasks_yielded += 1;
-                // Re-enqueue with the future restored.
+                // Restore the future and hand the task back to the caller to
+                // re-enqueue after this tick's drain loop finishes.
                 task.future = Some(pinned);
                 // Increment age for starvation tracking.
                 task.descriptor.age_ticks += 1;
-                self.queue.enqueue(task);
+                Some(task)
             }
         }
     }
@@ -406,5 +437,67 @@ mod tests {
             _ = executor.run() => panic!("executor stopped before the task delivered a result"),
         };
         assert_eq!(got, 42);
+    }
+
+    #[tokio::test]
+    async fn pending_task_does_not_busy_poll() {
+        // Regression: a task that legitimately stays `Poll::Pending` for a
+        // while (e.g. awaiting a real timer/IO) must not be re-polled in a
+        // tight loop. Previously the tick loop treated "we touched a task
+        // this tick" as "more work is ready right now" and looped via
+        // `yield_now` (near-instant) regardless of whether anything actually
+        // progressed — so a single long-pending task (e.g. every in-flight
+        // `agent_query`) pinned a CPU core polling it thousands of times.
+        use std::future::Future;
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        struct CountingSleep {
+            polls: Arc<AtomicU32>,
+            sleep: Pin<Box<tokio::time::Sleep>>,
+        }
+        impl Future for CountingSleep {
+            type Output = ();
+            fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+                self.polls.fetch_add(1, Ordering::SeqCst);
+                self.sleep.as_mut().poll(cx)
+            }
+        }
+
+        let queue = Arc::new(MultiQueue::new());
+        let supervisor = Supervisor::new("test", SupervisorStrategy::OneForOne);
+        let mut executor = SchedulerExecutor::new(
+            queue.clone(), SchedulerConfig::default(), supervisor, Arc::new(NoopFastPathSink),
+        );
+
+        let polls = Arc::new(AtomicU32::new(0));
+        let polls_clone = polls.clone();
+        let task = queue
+            .builder(PriorityClass::Interactive)
+            .origin("test")
+            .label("counting_sleep")
+            .spawn(async move {
+                CountingSleep {
+                    polls: polls_clone,
+                    sleep: Box::pin(tokio::time::sleep(Duration::from_millis(300))),
+                }
+                .await;
+            });
+        queue.enqueue(task);
+
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_millis(400)) => {}
+            _ = executor.run() => panic!("executor exited early"),
+        }
+
+        let count = polls.load(Ordering::SeqCst);
+        // The executor's `idle_sleep` (1ms default) is a *deliberate*
+        // periodic fallback tick — while genuinely parked it still re-polls
+        // a pending task roughly once per idle_sleep interval (~300 times
+        // over 300ms here), which is cheap and intended (see `run`'s doc
+        // comment). A true busy-spin regression polls thousands of times per
+        // *tick* (yield_now returns near-instantly, no sleep at all) — two
+        // orders of magnitude more — so the threshold below cleanly
+        // distinguishes "idle at 1ms granularity" from "pinning a core".
+        assert!(count < 500, "expected periodic (~1/ms) polling, got {count} in 300ms — scheduler is busy-spinning");
     }
 }
