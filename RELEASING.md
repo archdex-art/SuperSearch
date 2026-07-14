@@ -11,6 +11,12 @@ releases. Without them, `git tag vX.Y.Z && git push --tags` still produces an
 - Updater plugin registered (behind the `updater` feature); `check_for_updates`
   IPC command. No `updater:default` WebView capability is needed — the check
   runs Rust-side via `UpdaterExt`, not the JS plugin API.
+- Version is tracked in two places that must match before tagging:
+  `tauri.conf.json`'s `"version"` (what ships in the bundle/updater manifest)
+  and `src-tauri/Cargo.toml`'s `[package].version` (the crate version; the
+  boot log reads this via `env!("CARGO_PKG_VERSION")`, so it can't drift from
+  the log message independently — but it can still drift from
+  `tauri.conf.json` if you only bump one file). Bump both together.
 - Release workflow that builds on tag and publishes a draft GitHub Release,
   signing/notarizing automatically **if** the secrets are present.
 

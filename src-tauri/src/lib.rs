@@ -3,9 +3,9 @@
 //! Tauri v2 application entry point. Boots the Rust runtime kernel,
 //! extracts thread-safe handles for IPC, and launches the WebView.
 
-mod state;
-mod settings;
-mod commands;
+pub mod state;
+pub mod settings;
+pub mod commands;
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -207,7 +207,7 @@ pub fn run() {
         .compact()
         .init();
 
-    info!("SuperSearch v0.1.0 starting");
+    info!("SuperSearch v{} starting", env!("CARGO_PKG_VERSION"));
 
     // 2. Boot the runtime kernel.
     // Anchor the journal to an absolute path under the user's data dir. A

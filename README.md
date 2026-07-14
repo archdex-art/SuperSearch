@@ -23,7 +23,7 @@ SuperSearch is not just another launcher or command palette. It is a fundamental
 
 SuperSearch follows a modular architecture built for performance, security, and native integrations:
 
-* **`ui/` (Frontend):** A blazingly fast vanilla HTML/CSS/JS interface designed with rich, glassmorphic aesthetics. It communicates with the Rust backend entirely via Tauri IPC channels.
+* **`react-command-palette/` (Frontend):** A React + TypeScript + Tailwind + Framer Motion command palette (Spotlight/Raycast-grade motion). Built with Vite; the bundled `dist/` is what Tauri loads as `frontendDist`. It communicates with the Rust backend entirely via Tauri IPC channels. See [`react-command-palette/README.md`](react-command-palette/README.md) for the motion architecture.
 * **`src-tauri/` (App Host):** The Tauri daemon. Handles global hotkeys, window management, fuzzy searching (`commands/search.rs`), and dispatches OS-level AppleScript executions (`commands/actions.rs`).
 * **`crates/supersearch-runtime/` (AI Kernel):** The autonomous brain of SuperSearch.
   * `patterns.rs` — Natural Language Classifier mapped to deterministic Intents.

@@ -65,9 +65,10 @@ impl SegmentIterator {
                 have: self.data.len() - self.offset,
             });
         }
+        // Slice is exactly 4 bytes (checked above), so this conversion cannot fail.
         let len_bytes: [u8; 4] = self.data[self.offset..self.offset + 4]
             .try_into()
-            .unwrap();
+            .expect("slice length checked to be exactly 4 bytes above");
         let entry_len = u32::from_le_bytes(len_bytes) as usize;
         self.offset += 4;
 

@@ -48,6 +48,18 @@ npm --prefix react-command-palette run build
   (e.g. `action_without_capability_is_blocked_before_touching_the_os`,
   `clipboard_write_roundtrips_untrusted_content`). A PR that weakens one of
   these needs to explain why in the description, not just delete the test.
+- If you touched `src-tauri/src/commands/*.rs` (added, removed, or renamed a
+  `#[tauri::command]`), also run the IPC boundary test:
+  `cargo test -p supersearch-app --test ipc`. It drives real `invoke()` calls
+  through `tauri::test::get_ipc_response` against the same command table
+  `run()` registers, so a renamed command or a broken `State` extractor fails
+  there instead of shipping silently broken to the frontend. It lives under
+  `src-tauri/tests/` (a standalone integration-test binary), not beside the
+  handler, and is skipped on Windows: linking this crate's `rlib` into any
+  external binary hits `STATUS_ENTRYPOINT_NOT_FOUND` on the Windows CI
+  runner because of the `[lib] crate-type = ["staticlib", "cdylib", "rlib"]`
+  the app bundle needs — Windows coverage still comes from the `--lib` unit
+  tests plus the real `.exe`/`.msi` built by `cargo tauri build`.
 - If you touched `react-command-palette/`, the frontend CI job
   (`.github/workflows/ci.yml`) runs a TypeScript typecheck + Vite build —
   reproduce locally with the npm commands above before pushing.
@@ -66,6 +78,13 @@ npm --prefix react-command-palette run build
 - **Platform-specific code** goes behind the `PlatformBackend` trait
   (`platform/exec.rs`) with per-OS implementations in `platform/{macos,linux,windows}.rs`,
   so IPC handlers stay platform-agnostic.
+- **Don't `unwrap()`/`expect()`/`panic!()` on external input.** File
+  contents, extension manifests, OS command output, and journal segments
+  read from disk are not guaranteed well-formed — return a typed `Result`
+  error (see `journal::reader::ReaderError`, `extension::manifest::ManifestError`
+  for the existing error-enum pattern) instead of panicking. `unwrap()` is
+  fine only where a prior check makes failure structurally impossible
+  (annotate why) or in `#[cfg(test)]` code.
 - Keep module-level doc comments (`//! …`) accurate — they're the source for
   [docs/architecture.md](docs/architecture.md)'s module map. If your PR
   changes a module's responsibility, update its `//!` block in the same PR.

@@ -1,12 +1,12 @@
 //! Telemetry command — provides real-time kernel metrics to the frontend.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::command;
 
 use crate::state::AppState;
 
 /// Telemetry snapshot returned to the frontend.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TelemetrySnapshot {
     /// Scheduler tick count.
     pub scheduler_ticks: u64,

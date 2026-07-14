@@ -10,7 +10,8 @@ has no Tauri dependency and can be embedded, tested, or replayed headless.
         │
         ▼
 ┌───────────────────┐   fuzzy match over apps / files / commands
-│   ui/ (frontend)   │──────────────────────────────────────────┐
+│ react-command-     │──────────────────────────────────────────┐
+│ palette/ (frontend)│                                          │
 └─────────┬──────────┘                                          │
           │ Tauri IPC                                           ▼
 ┌─────────▼──────────┐                                 ┌─────────────────┐
@@ -34,8 +35,7 @@ has no Tauri dependency and can be embedded, tested, or replayed headless.
 
 | Path | Responsibility |
 |---|---|
-| `ui/` | Vanilla HTML/CSS/JS palette UI, glassmorphic, talks to the host purely via Tauri IPC |
-| `react-command-palette/` | React port of the palette (unified search source, see B3/B4 history) |
+| `react-command-palette/` | The frontend: React + TypeScript + Tailwind + Framer Motion palette (Spotlight/Raycast-grade motion). Built with Vite; `frontendDist` in `tauri.conf.json` points at its `dist/` output — this is the only frontend the app builds/ships. |
 | `src-tauri/` | Tauri app host: window/hotkey management, IPC command handlers, updater |
 | `src-tauri/src/commands/` | One module per IPC surface: `search`, `system_search`, `actions`, `agent`, `extensions`, `journal`, `settings`, `telemetry`, `updater`, `window` |
 | `crates/supersearch-runtime/` | The AI kernel — Tauri-independent, unit-testable in isolation |
