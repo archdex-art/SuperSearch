@@ -60,11 +60,24 @@ fn default_journal_dir() -> String {
         .into_owned()
 }
 
-/// Make the palette behave like a system overlay: it joins every Space *and*
-/// floats over full-screen apps. `CanJoinAllSpaces` (set elsewhere via
-/// `set_visible_on_all_workspaces`) handles normal Spaces, but a full-screen
-/// app is its own Space, so the window also needs `FullScreenAuxiliary` — a
-/// collection-behavior flag Tauri doesn't expose, so we set it on the NSWindow.
+/// Make the palette behave like a system overlay: it joins every Space, floats
+/// over full-screen apps, *and* sits at a high enough window level to actually
+/// draw on top of them.
+///
+/// Two things are required and both are set here (Tauri exposes neither):
+/// 1. **Collection behavior** — `CanJoinAllSpaces` lets the window follow the
+///    active Space; `FullScreenAuxiliary` lets it attach to a full-screen app's
+///    Space (which is otherwise isolated). `set_visible_on_all_workspaces` only
+///    sets the first flag.
+/// 2. **A high window level** — `set_always_on_top(true)` only raises the window
+///    to `NSFloatingWindowLevel` (3), which is *not* high enough to composite
+///    above a full-screen app; the window silently stays behind it. Spotlight-
+///    style overlays need `NSStatusWindowLevel` (25), i.e. the menu-bar level.
+///    That's why the caller must NOT also call `set_always_on_top` — its async
+///    `setLevel:` would otherwise clobber this one back down to 3.
+///
+/// Re-asserted on every summon (see `show_palette`) because macOS can reset a
+/// window's level/behavior when it is ordered out and back across Spaces.
 #[cfg(target_os = "macos")]
 fn enable_fullscreen_overlay(window: &tauri::WebviewWindow) {
     use objc2::msg_send;
@@ -73,17 +86,25 @@ fn enable_fullscreen_overlay(window: &tauri::WebviewWindow) {
     // NSWindowCollectionBehavior bit flags (AppKit).
     const NS_CAN_JOIN_ALL_SPACES: usize = 1 << 0;
     const NS_FULLSCREEN_AUXILIARY: usize = 1 << 8;
+    // NSStatusWindowLevel — the menu-bar level (CGWindowLevelForKey of
+    // kCGStatusWindowLevelKey == 25 on all current macOS). High enough to draw
+    // over a full-screen app's content, low enough to stay below system alerts.
+    const NS_STATUS_WINDOW_LEVEL: isize = 25;
 
     match window.ns_window() {
         Ok(ptr) => {
             let ns_window = ptr as *mut AnyObject;
             // SAFETY: `ns_window` is a valid NSWindow pointer owned by the
             // window for its lifetime; we only read and re-set its collection
-            // behavior (a plain bitmask), adding flags without dropping any.
+            // behavior (a plain bitmask, adding flags without dropping any) and
+            // its window level (a plain NSInteger). This runs on the main
+            // thread (Tauri `setup` / the summon handler), where AppKit window
+            // mutation is required.
             unsafe {
                 let current: usize = msg_send![ns_window, collectionBehavior];
                 let behavior = current | NS_CAN_JOIN_ALL_SPACES | NS_FULLSCREEN_AUXILIARY;
                 let _: () = msg_send![ns_window, setCollectionBehavior: behavior];
+                let _: () = msg_send![ns_window, setLevel: NS_STATUS_WINDOW_LEVEL];
             }
         }
         Err(e) => error!(error = %e, "Could not access NSWindow for overlay setup"),
@@ -152,6 +173,10 @@ fn enable_fullscreen_overlay(_window: &tauri::WebviewWindow) {}
 
 /// Show, center, and focus the palette, then tell the UI to reset its input.
 fn show_palette(window: &tauri::WebviewWindow) {
+    // Re-assert the overlay collection-behavior + high window level every time:
+    // macOS can drop them when the window is ordered out and back across
+    // Spaces, which would make the palette fall behind a full-screen app.
+    enable_fullscreen_overlay(window);
     let _ = window.center();
     let _ = window.show();
     let _ = window.set_focus();
@@ -319,8 +344,11 @@ pub fn run() {
                 if let Err(e) = window.set_visible_on_all_workspaces(true) {
                     error!(error = %e, "Failed to set visible-on-all-workspaces");
                 }
-                let _ = window.set_always_on_top(true);
-                // Also float over full-screen apps (adds FullScreenAuxiliary).
+                // Float over full-screen apps + sit at a high window level.
+                // (Deliberately NOT `set_always_on_top`: it async-sets only
+                // NSFloatingWindowLevel, which would clobber the higher
+                // NSStatusWindowLevel this sets and leave the palette behind
+                // full-screen apps.)
                 enable_fullscreen_overlay(&window);
 
                 // Show the palette once on first launch so the app isn't

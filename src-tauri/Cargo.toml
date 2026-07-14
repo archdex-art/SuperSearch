@@ -1,6 +1,6 @@
 [package]
 name = "supersearch-app"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 description = "SuperSearch — AI-Native Productivity Layer Desktop App"
 

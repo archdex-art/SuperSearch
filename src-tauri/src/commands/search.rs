@@ -10,6 +10,7 @@ use tauri::command;
 
 use super::system_search;
 use crate::state::AppState;
+use supersearch_runtime::agent::AgentController;
 use supersearch_runtime::extension::{ExtensionAction, ExtensionRegistry};
 
 /// A single search result item.
@@ -38,12 +39,31 @@ pub struct SearchResult {
 /// 1. Application bundles (/Applications, ~/Applications, /System/Applications)
 /// 2. Files via Spotlight (mdfind)
 /// 3. Built-in system commands
+///
+/// The pipeline below spawns blocking OS work (`mdfind`, extension
+/// subprocesses). It runs on a dedicated blocking thread via `spawn_blocking`
+/// rather than inline on the IPC caller's thread — a plain (non-`async`) Tauri
+/// command executes its body synchronously on whatever thread delivers the
+/// IPC message, which on macOS is the WKWebView's main thread. Since this
+/// command fires on (debounced) every keystroke, running `mdfind` inline
+/// froze the entire window — no typing, no animation, unresponsive hotkeys —
+/// for as long as each search took.
 #[command]
-pub fn search_query(
+pub async fn search_query(
     query: String,
     state: tauri::State<'_, AppState>,
     registry: tauri::State<'_, Arc<ExtensionRegistry>>,
-) -> Vec<SearchResult> {
+) -> Result<Vec<SearchResult>, String> {
+    let agent = state.agent.clone();
+    let registry = registry.inner().clone();
+    tokio::task::spawn_blocking(move || run_search(query, &agent, &registry))
+        .await
+        .map_err(|e| format!("search task panicked: {e}"))
+}
+
+/// The actual (blocking, OS-touching) search pipeline. See `search_query`'s
+/// doc comment for why this is offloaded to a blocking thread.
+fn run_search(query: String, agent: &AgentController, registry: &ExtensionRegistry) -> Vec<SearchResult> {
     let q = query.trim();
 
     if q.is_empty() {
@@ -89,7 +109,7 @@ pub fn search_query(
     }
 
     // 4. If it looks like a natural-language command, add an "Ask Agent" result.
-    if state.agent.is_agent_query(&query) {
+    if agent.is_agent_query(&query) {
         results.insert(0, SearchResult {
             id: format!("agent:{}", query),
             title: format!("⚡ {}", query),

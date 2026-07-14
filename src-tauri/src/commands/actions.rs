@@ -6,12 +6,14 @@
 #![allow(clippy::needless_return)]
 
 use std::process::Command;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use tauri::command;
 use tracing::info;
 
 use crate::state::AppState;
+use supersearch_runtime::agent::AgentController;
+use supersearch_runtime::journal::writer::JournalSender;
 use supersearch_runtime::journal::{EntryKind, JournalEntry};
 use supersearch_runtime::platform::StepResult;
 
@@ -41,10 +43,32 @@ pub struct ExecuteActionResponse {
 }
 
 /// Execute a palette action through real OS automation.
+///
+/// Runs on a blocking thread (`spawn_blocking`) rather than inline on the IPC
+/// caller's thread: a plain (non-`async`) Tauri command runs synchronously on
+/// the thread that delivers the IPC message — the WKWebView main thread on
+/// macOS — so spawning `open`/`osascript`/… inline froze the whole window for
+/// up to `ACTION_TIMEOUT` (15s) on every selection.
 #[command]
-pub fn execute_action(
+pub async fn execute_action(
     request: ExecuteActionRequest,
     state: tauri::State<'_, AppState>,
+) -> Result<ExecuteActionResponse, String> {
+    let agent = state.agent.clone();
+    let boot_instant = state.boot_instant;
+    let journal = state.journal_sender.clone();
+    tokio::task::spawn_blocking(move || run_action(request, &agent, boot_instant, &journal))
+        .await
+        .map_err(|e| format!("action task panicked: {e}"))?
+}
+
+/// The actual (blocking, OS-touching) action pipeline. See `execute_action`'s
+/// doc comment for why this is offloaded to a blocking thread.
+fn run_action(
+    request: ExecuteActionRequest,
+    agent: &AgentController,
+    boot_instant: Instant,
+    journal: &JournalSender,
 ) -> Result<ExecuteActionResponse, String> {
     let action_id = &request.action_id;
     // Bound the payload; a well-formed action id is short (a prefix + a path,
@@ -87,7 +111,7 @@ pub fn execute_action(
         }
     } else if let Some(query) = action_id.strip_prefix("agent:") {
         // Execute via agent.
-        let agent_response = state.agent.process_query(query);
+        let agent_response = agent.process_query(query);
         ExecuteActionResponse {
             action_id: action_id.to_string(),
             acknowledged: true,
@@ -106,11 +130,11 @@ pub fn execute_action(
     if let Ok(payload) = serde_json::to_vec(&response) {
         let journal_entry = JournalEntry::new(
             EntryKind::ToolCallResult,
-            state.boot_instant.elapsed().as_nanos() as u64,
+            boot_instant.elapsed().as_nanos() as u64,
             "ui".into(),
             payload,
         );
-        let _ = state.journal_sender.send(journal_entry);
+        let _ = journal.send(journal_entry);
     }
 
     Ok(response)
