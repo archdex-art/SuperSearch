@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { motion, type Transition, type Variants } from "framer-motion";
 import type { CommandAction } from "./types";
+import { categoryStyle } from "./categories";
 
 interface CommandItemProps {
   action: CommandAction;
@@ -11,6 +12,8 @@ interface CommandItemProps {
   /** Hover drives selection (Spotlight/Raycast behavior) → highlight glides. */
   onActivate: () => void;
   onSelect: () => void;
+  /** Tighter row for narrow master-detail layouts; omits the right-side hint text. */
+  compact?: boolean;
 }
 
 /**
@@ -21,7 +24,8 @@ interface CommandItemProps {
  * Framer Motion's shared-layout engine then *glides* it from the old row to the
  * new one with `highlightSpring`. That's the entire trick behind the smooth
  * "active item slides between selections" feel, and it stays on the GPU
- * transform path (no top/left animation, no reflow).
+ * transform path (no top/left animation, no reflow). A slim category-colored
+ * bar rides inside the same glide, so the accent tracks the highlight for free.
  */
 function CommandItemBase({
   action,
@@ -31,7 +35,11 @@ function CommandItemBase({
   highlightTransition,
   onActivate,
   onSelect,
+  compact = false,
 }: CommandItemProps) {
+  const style = categoryStyle(action.group);
+  const isImg = typeof action.icon === "string" && /^https?:|^data:|\//.test(action.icon);
+
   return (
     <motion.li
       id={domId}
@@ -41,45 +49,54 @@ function CommandItemBase({
       onPointerMove={onActivate}
       onPointerDown={(e) => e.preventDefault() /* keep input focus */}
       onClick={onSelect}
-      className="relative flex h-[52px] cursor-default select-none items-center gap-3 rounded-xl px-3"
+      className={`relative flex cursor-default select-none items-center gap-2.5 rounded-xl px-2.5 ${
+        compact ? "h-[42px]" : "h-[52px] gap-3 px-3"
+      }`}
     >
       {active && (
         <motion.div
           layoutId="cmd-highlight"
           transition={highlightTransition}
-          className="absolute inset-0 rounded-xl bg-white/[0.10] ring-1 ring-inset ring-white/[0.08] shadow-[0_1px_0_0_rgba(255,255,255,0.06)_inset]"
-        />
+          className="absolute inset-0 overflow-hidden rounded-xl bg-gradient-to-r from-white/[0.09] via-white/[0.12] to-white/[0.06]
+                     ring-1 ring-inset ring-white/[0.09] shadow-[0_1px_0_0_rgba(255,255,255,0.07)_inset]"
+        >
+          <span className={`absolute inset-y-2 left-0 w-[3px] rounded-full ${style.bar}`} />
+        </motion.div>
       )}
 
-      <span className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg text-xl">
-        {typeof action.icon === "string" && /^https?:|^data:|\//.test(action.icon) ? (
-          <img src={action.icon} alt="" className="h-full w-full object-cover" />
+      <span
+        className={`relative z-10 flex shrink-0 items-center justify-center overflow-hidden rounded-[9px] ${style.chip} ${
+          compact ? "h-6 w-6 text-[14px]" : "h-8 w-8 text-xl"
+        }`}
+      >
+        {isImg ? (
+          <img src={action.icon as string} alt="" className="h-full w-full object-cover" />
         ) : (
-          action.icon ?? "•"
+          (action.icon ?? "•")
         )}
       </span>
 
       <span className="relative z-10 flex min-w-0 flex-col">
-        <span className="truncate text-[15px] font-medium leading-tight text-white/95">
+        <span
+          className={`truncate font-medium leading-tight text-white/95 ${compact ? "text-[13.5px]" : "text-[15px]"}`}
+        >
           {action.title}
         </span>
-        {action.subtitle && (
-          <span className="truncate text-[12.5px] leading-tight text-white/45">
-            {action.subtitle}
-          </span>
+        {action.subtitle && !compact && (
+          <span className="truncate text-[12.5px] leading-tight text-white/45">{action.subtitle}</span>
         )}
       </span>
 
       {/* Right-side action hint, only on the active row (Spotlight-style). */}
-      <span className="relative z-10 ml-auto flex shrink-0 items-center gap-2 pl-3">
+      <span className="relative z-10 ml-auto flex shrink-0 items-center gap-2 pl-2">
         <motion.span
           initial={false}
           animate={{ opacity: active ? 1 : 0, x: active ? 0 : 4 }}
           transition={{ duration: 0.14, ease: "easeOut" }}
           className="flex items-center gap-2 text-[13px] text-white/55"
         >
-          {action.hint && <span>{action.hint}</span>}
-          <kbd className="rounded-md border border-white/15 bg-white/10 px-1.5 py-0.5 text-[11px] text-white/80">
+          {action.hint && !compact && <span>{action.hint}</span>}
+          <kbd className="rounded-md border border-violet-300/20 bg-violet-400/10 px-1.5 py-0.5 text-[11px] text-violet-100/90">
             ↵
           </kbd>
         </motion.span>
@@ -94,6 +111,7 @@ export const CommandItem = memo(CommandItemBase, (a, b) => {
     a.active === b.active &&
     a.action === b.action &&
     a.domId === b.domId &&
-    a.itemVariants === b.itemVariants
+    a.itemVariants === b.itemVariants &&
+    a.compact === b.compact
   );
 });

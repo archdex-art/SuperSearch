@@ -19,7 +19,7 @@ export default function Demo() {
   useGlobalHotkey(useCallback(() => setOpen((o) => !o), []));
 
   return (
-    <div className="grid min-h-screen place-items-center bg-gradient-to-br from-[#0b1220] via-[#0e1a33] to-[#0a2540] text-white">
+    <div className="grid min-h-screen place-items-center bg-gradient-to-br from-[#0b0a17] via-[#160f2e] to-[#1a1220] text-white">
       <button
         onClick={() => setOpen(true)}
         className="rounded-xl border border-white/15 bg-white/10 px-5 py-2.5 text-sm font-medium backdrop-blur transition-transform active:scale-95"
