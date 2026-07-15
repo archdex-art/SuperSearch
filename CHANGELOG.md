@@ -5,6 +5,17 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versions
 correspond to [GitHub Releases](https://github.com/archdex-art/SuperSearch/releases)
 and their published installers.
 
+## [0.1.6] — 2026-07-15
+
+Follow-up polish on the 0.1.5 redesign.
+
+### Changed
+- **Static rim, not spinning.** The panel's conic-gradient border no longer
+  rotates — it's a fixed diagonal sweep (violet top-left → amber
+  bottom-right, echoing the ambient wash), plus a matching static violet
+  glow under the panel shadow. Calmer for a tool opened dozens of times a
+  day.
+
 ## [0.1.5] — 2026-07-15
 
 Command palette visual redesign: master-detail layout, category color coding,
@@ -159,7 +170,8 @@ First cross-platform release — macOS, Linux, and Windows.
 
 ---
 
-[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.6
 [0.1.5]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.5
 [0.1.4]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.4
 [0.1.3]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.3
