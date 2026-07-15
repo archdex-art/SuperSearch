@@ -5,6 +5,31 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versions
 correspond to [GitHub Releases](https://github.com/archdex-art/SuperSearch/releases)
 and their published installers.
 
+## [0.1.5] — 2026-07-15
+
+Command palette visual redesign: master-detail layout, category color coding,
+and a distinct "aurora" identity in place of the earlier generic dark-glass
+look.
+
+### Changed
+- **Master-detail results.** The palette now splits into a narrow result list
+  and a detail pane for the highlighted row (icon, title, category, action,
+  path), instead of a single flat list — mirrors a launcher/detail-view shape
+  without copying any specific product's styling.
+- **Category color coding.** Each result's icon chip, active-row accent bar,
+  and section-header dot now carry a category-specific hue (Agent = violet,
+  Command = sky, Application = amber, Extension = fuchsia, System = teal,
+  Files = slate) via a new shared `categories.ts` module, so the source of a
+  result reads at a glance.
+- **Type filter.** A chip in the search bar lets you narrow the current
+  results to one category; only shown when more than one category is present.
+- **New visual identity.** Replaced the flat dark-glass panel with a slowly
+  rotating "aurora" gradient rim (`aurora-frame` in `styles.css`), an ambient
+  violet/amber color wash on the glass, and a context-aware footer that shows
+  the active result's action ("Open Figma") instead of static branding.
+- Result-count badge in the search bar; violet-tinted caret, scrollbar, and
+  keyboard-shortcut chips throughout, replacing the previous emerald accent.
+
 ## [0.1.4] — 2026-07-14
 
 UI responsiveness, full-screen overlay, and branding.
@@ -134,7 +159,8 @@ First cross-platform release — macOS, Linux, and Windows.
 
 ---
 
-[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.5
 [0.1.4]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.4
 [0.1.3]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.3
 [0.1.1]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.1

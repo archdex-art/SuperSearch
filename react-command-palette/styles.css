@@ -8,16 +8,60 @@ body,
   height: 100%;
 }
 
-/* Thin, unobtrusive scrollbar for the results list. */
+/* Thin, unobtrusive scrollbar for the results list — accented to match the palette. */
 *::-webkit-scrollbar {
   width: 8px;
 }
 *::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(167, 139, 250, 0.25);
   border-radius: 4px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(167, 139, 250, 0.4);
+  background-clip: padding-box;
+}
 *::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/*
+ * Aurora rim: a conic-gradient sweep clipped to a 1.5px ring around the
+ * panel via `overflow: hidden` + oversized `::before`. The visible child
+ * (the actual glass panel) sits on top at z-index 1, covering everything
+ * but that thin border — so only a slow, soft color sweep shows through.
+ */
+.aurora-frame {
+  overflow: hidden;
+  isolation: isolate;
+}
+.aurora-frame::before {
+  content: "";
+  position: absolute;
+  inset: -60%;
+  background: conic-gradient(
+    from 0deg,
+    rgba(167, 139, 250, 0.85),
+    rgba(56, 189, 248, 0) 28%,
+    rgba(245, 166, 35, 0.8) 52%,
+    rgba(167, 139, 250, 0) 78%,
+    rgba(167, 139, 250, 0.85) 100%
+  );
+  animation: aurora-spin 9s linear infinite;
+  z-index: 0;
+}
+.aurora-frame > * {
+  position: relative;
+  z-index: 1;
+}
+@keyframes aurora-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aurora-frame::before {
+    animation: none;
+  }
 }
