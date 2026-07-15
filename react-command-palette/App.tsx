@@ -213,8 +213,8 @@ export default function App() {
         style={{ willChange: "transform, opacity" }}
         className="relative h-full w-full"
       >
-        {/* Animated rim — a slowly rotating conic sweep clipped to a 1.5px ring. */}
-        <div className="aurora-frame relative h-full w-full rounded-[20px] p-[1.5px] shadow-[0_30px_80px_-20px_rgba(0,0,0,0.65)]">
+        {/* Static rim — a fixed conic sweep (no rotation) clipped to a 1.5px ring. */}
+        <div className="aurora-frame relative h-full w-full rounded-[20px] p-[1.5px] shadow-[0_30px_80px_-20px_rgba(0,0,0,0.65),0_0_60px_-28px_rgba(139,92,246,0.45)]">
           <div
             role="dialog"
             aria-label="SuperSearch"
