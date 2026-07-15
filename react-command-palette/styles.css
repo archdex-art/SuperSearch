@@ -27,12 +27,15 @@ body,
 }
 
 /*
- * Aurora rim: a conic-gradient sweep clipped to a 1.5px ring around the
- * panel via `overflow: hidden` + oversized `::before`. The visible child
- * (the actual glass panel) sits on top at z-index 1, covering everything
- * but that thin border — so only a slow, soft color sweep shows through.
+ * Aurora rim: a fixed, static conic-gradient sweep clipped to a 1.5px ring
+ * around the panel via `overflow: hidden` + an oversized `::before`. The
+ * visible child (the actual glass panel) sits on top at z-index 1, covering
+ * everything but that thin border — a calm, unmoving color edge rather than
+ * a spinning one. The start angle is chosen so violet lands near the
+ * top-left corner and amber near the bottom-right, echoing the ambient wash.
  */
 .aurora-frame {
+  position: relative;
   overflow: hidden;
   isolation: isolate;
 }
@@ -41,27 +44,16 @@ body,
   position: absolute;
   inset: -60%;
   background: conic-gradient(
-    from 0deg,
-    rgba(167, 139, 250, 0.85),
-    rgba(56, 189, 248, 0) 28%,
-    rgba(245, 166, 35, 0.8) 52%,
-    rgba(167, 139, 250, 0) 78%,
-    rgba(167, 139, 250, 0.85) 100%
+    from -45deg,
+    rgba(167, 139, 250, 0.92),
+    rgba(99, 102, 241, 0.32) 26%,
+    rgba(245, 166, 35, 0.88) 52%,
+    rgba(236, 72, 153, 0.3) 76%,
+    rgba(167, 139, 250, 0.92) 100%
   );
-  animation: aurora-spin 9s linear infinite;
   z-index: 0;
 }
 .aurora-frame > * {
   position: relative;
   z-index: 1;
-}
-@keyframes aurora-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .aurora-frame::before {
-    animation: none;
-  }
 }

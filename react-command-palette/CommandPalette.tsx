@@ -199,7 +199,7 @@ export function CommandPalette({
             style={{ willChange: "transform, opacity" }}
             className="relative w-full max-w-[640px]"
           >
-            <div className="aurora-frame relative rounded-[19px] p-[1.5px] shadow-[0_32px_80px_-16px_rgba(0,0,0,0.6)]">
+            <div className="aurora-frame relative rounded-[19px] p-[1.5px] shadow-[0_32px_80px_-16px_rgba(0,0,0,0.6),0_0_60px_-28px_rgba(139,92,246,0.45)]">
               <div
                 role="dialog"
                 aria-modal="true"
