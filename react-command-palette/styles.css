@@ -70,11 +70,21 @@
   src: url("/fonts/martian-mono-700.ttf") format("truetype");
 }
 
-/* Default accent (the "Instrument" amber). Overwritten at runtime by
-   theme.ts:applyAccent() from Settings.accent_color — this is only the
+/* Default accent (the "Instrument" amber) and base theme surfaces.
+   Overwritten at runtime by theme.ts (applyAccent()/applyTheme()) from
+   Settings.accent_color / Settings.theme — these are only the
    pre-JS/no-settings fallback, and what browser dev preview uses. */
 :root {
   --accent-rgb: 245 166 35;
+  /* "dark" (default): near-black canvas, white ink for every text/overlay
+     opacity utility (text-ink/*, bg-ink/*, border-ink/*, ring-ink/*). */
+  --canvas-rgb: 14 12 10; /* ~ hsl(32 14% 7%) */
+  --ink-rgb: 255 255 255;
+}
+
+[data-theme="light"] {
+  --canvas-rgb: 250 248 245;
+  --ink-rgb: 12 10 8;
 }
 
 html,

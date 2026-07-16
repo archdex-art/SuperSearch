@@ -38,8 +38,8 @@ export function AboutPane() {
           <span className="h-2.5 w-2.5 rounded-full bg-accent shadow-[0_0_10px_1px_rgb(var(--accent-rgb)/0.6)]" />
         </span>
         <div className="flex flex-col gap-0.5">
-          <span className="text-[16px] font-semibold text-white/95">SuperSearch</span>
-          <span className="font-mono text-[12px] text-white/40">v{version}</span>
+          <span className="text-[16px] font-semibold text-ink/95">SuperSearch</span>
+          <span className="font-mono text-[12px] text-ink/40">v{version}</span>
         </div>
       </div>
 
@@ -47,7 +47,7 @@ export function AboutPane() {
         <SectionHeading>Updates</SectionHeading>
         <Card>
           <Row>
-            <span className="text-[13.5px] text-white/80">{result ?? "Check for the latest release"}</span>
+            <span className="text-[13.5px] text-ink/80">{result ?? "Check for the latest release"}</span>
             <Button onClick={checkForUpdates} disabled={checking}>
               {checking ? "Checking…" : "Check now"}
             </Button>
@@ -64,7 +64,7 @@ export function AboutPane() {
             { label: "Report an Issue", url: "https://github.com/archdex-art/SuperSearch/issues" },
           ].map((link) => (
             <Row key={link.url}>
-              <span className="text-[13.5px] text-white/80">{link.label}</span>
+              <span className="text-[13.5px] text-ink/80">{link.label}</span>
               <a
                 href={link.url}
                 target="_blank"

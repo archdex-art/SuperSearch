@@ -14,6 +14,13 @@ const PRESETS: { id: string; label: string; hex: string }[] = [
   { id: "violet", label: "Violet", hex: "#a78bfa" },
 ];
 
+/** Base UI theme options — independent of accent color, so a user can pair
+ *  any accent with either surface. */
+const THEMES: { id: "dark" | "light"; label: string }[] = [
+  { id: "dark", label: "Dark" },
+  { id: "light", label: "Light" },
+];
+
 export function AppearancePane({
   settings,
   onChange,
@@ -22,10 +29,39 @@ export function AppearancePane({
   onChange: (patch: Partial<Settings>) => void;
 }) {
   const current = settings.accent_color ?? DEFAULT_ACCENT_HEX;
+  const activeTheme = settings.theme === "light" ? "light" : "dark";
   const [customOpen, setCustomOpen] = useState(false);
 
   return (
     <div className="flex flex-col gap-6">
+      <div>
+        <SectionHeading>Theme</SectionHeading>
+        <Card>
+          <div className="flex items-center gap-3 py-4">
+            {THEMES.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => onChange({ theme: t.id })}
+                aria-pressed={activeTheme === t.id}
+                className={`flex items-center gap-2 rounded-lg border px-3.5 py-1.5 text-[12.5px] font-medium transition-colors ${
+                  activeTheme === t.id
+                    ? "border-accent/50 bg-accent/[0.12] text-accent"
+                    : "border-ink/[0.1] bg-ink/[0.05] text-ink/75 hover:bg-ink/[0.08] hover:text-ink/95"
+                }`}
+              >
+                <span
+                  className={`h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-inset ring-ink/20 ${
+                    t.id === "dark" ? "bg-[#141210]" : "bg-[#faf8f5]"
+                  }`}
+                />
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </Card>
+      </div>
+
       <div>
         <SectionHeading>Accent Color</SectionHeading>
         <Card>
@@ -37,8 +73,8 @@ export function AppearancePane({
                 onClick={() => onChange({ accent_color: p.id === "amber" ? null : p.hex })}
                 aria-label={p.label}
                 title={p.label}
-                className={`relative h-8 w-8 shrink-0 rounded-full ring-2 ring-offset-2 ring-offset-[hsl(32,14%,7%)] transition-transform hover:scale-110 ${
-                  current.toLowerCase() === p.hex.toLowerCase() ? "ring-white/70" : "ring-transparent"
+                className={`relative h-8 w-8 shrink-0 rounded-full ring-2 ring-offset-2 ring-offset-canvas transition-transform hover:scale-110 ${
+                  current.toLowerCase() === p.hex.toLowerCase() ? "ring-ink/70" : "ring-transparent"
                 }`}
                 style={{ backgroundColor: p.hex }}
               />
@@ -51,8 +87,8 @@ export function AppearancePane({
               onClick={() => setCustomOpen((o) => !o)}
               aria-label="Custom color"
               title="Custom color"
-              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[15px] leading-none ring-2 ring-offset-2 ring-offset-[hsl(32,14%,7%)] transition-transform hover:scale-110 ${
-                customOpen ? "ring-white/70" : "ring-white/[0.15]"
+              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[15px] leading-none ring-2 ring-offset-2 ring-offset-canvas transition-transform hover:scale-110 ${
+                customOpen ? "ring-ink/70" : "ring-ink/[0.15]"
               }`}
               style={
                 !PRESETS.some((p) => p.hex.toLowerCase() === current.toLowerCase())
@@ -71,7 +107,7 @@ export function AppearancePane({
                 onChange={(hex) => onChange({ accent_color: hex })}
                 style={{ width: "100%", height: 140 }}
               />
-              <span className="font-mono text-[11px] uppercase tracking-wide text-white/40">{current}</span>
+              <span className="font-mono text-[11px] uppercase tracking-wide text-ink/40">{current}</span>
             </div>
           )}
         </Card>
@@ -88,8 +124,8 @@ export function AppearancePane({
               🎵
             </span>
             <div className="flex min-w-0 flex-col">
-              <span className="truncate text-[14px] font-medium text-white/90">Apple Music</span>
-              <span className="truncate text-[12px] text-white/40">/Applications/Apple Music.app</span>
+              <span className="truncate text-[14px] font-medium text-ink/90">Apple Music</span>
+              <span className="truncate text-[12px] text-ink/40">/Applications/Apple Music.app</span>
             </div>
             <kbd
               className="ml-auto rounded-md border px-1.5 py-0.5 font-mono text-[11px]"

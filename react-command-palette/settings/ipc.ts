@@ -47,6 +47,20 @@ export async function validateShortcut(shortcut: string): Promise<ShortcutCheck>
     : { ok: true };
 }
 
+/** Unregister the currently-bound global hotkey for the duration of a
+ *  capture session, so every keystroke (including the combo already bound)
+ *  reaches the settings window instead of being swallowed by the OS-level
+ *  shortcut hook. No-op in browser dev, where no real hotkey is registered. */
+export async function suspendToggleShortcut(): Promise<void> {
+  if (isTauri) await tauriInvoke("suspend_toggle_shortcut");
+}
+
+/** Re-arm the persisted toggle hotkey once a capture session ends
+ *  (committed, cancelled, or the pane unmounts mid-capture). */
+export async function resumeToggleShortcut(): Promise<void> {
+  if (isTauri) await tauriInvoke("resume_toggle_shortcut");
+}
+
 // ── Extensions ───────────────────────────────────────────────────────────────
 
 export async function listExtensions(): Promise<ExtensionInfo[]> {

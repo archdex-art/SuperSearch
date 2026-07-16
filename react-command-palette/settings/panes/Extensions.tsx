@@ -98,11 +98,11 @@ export function ExtensionsPane() {
       )}
 
       {extensions === null ? (
-        <div className="py-10 text-center text-[13px] text-white/35">Loading…</div>
+        <div className="py-10 text-center text-[13px] text-ink/35">Loading…</div>
       ) : extensions.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 py-14 text-center text-white/35">
+        <div className="flex flex-col items-center gap-2 py-14 text-center text-ink/35">
           <span className="text-[13px]">No extensions installed</span>
-          <span className="text-[12px] text-white/25">
+          <span className="text-[12px] text-ink/25">
             Install a directory containing a manifest.toml to add one
           </span>
         </div>
@@ -119,20 +119,20 @@ export function ExtensionsPane() {
                 <div className="flex items-start justify-between gap-4 py-3.5">
                   <div className="flex min-w-0 flex-col gap-1">
                     <div className="flex items-center gap-2">
-                      <span className="truncate text-[14px] font-medium text-white/90">{ext.name}</span>
-                      <span className="font-mono text-[11px] text-white/30">v{ext.version}</span>
+                      <span className="truncate text-[14px] font-medium text-ink/90">{ext.name}</span>
+                      <span className="font-mono text-[11px] text-ink/30">v{ext.version}</span>
                       {ext.needs_trust && <Pill tone="rose">Needs trust</Pill>}
                       {ext.enabled && !ext.needs_trust && <Pill tone="amber">Active</Pill>}
                     </div>
                     {ext.description && (
-                      <span className="truncate text-[12.5px] text-white/45">{ext.description}</span>
+                      <span className="truncate text-[12.5px] text-ink/45">{ext.description}</span>
                     )}
-                    {ext.author && <span className="text-[11.5px] text-white/30">by {ext.author}</span>}
+                    {ext.author && <span className="text-[11.5px] text-ink/30">by {ext.author}</span>}
                     {ext.permissions.length > 0 && (
                       <ul className="mt-1 flex flex-col gap-0.5">
                         {ext.permissions.map((p) => (
-                          <li key={p.permission} className="flex items-baseline gap-1.5 text-[11.5px] text-white/35">
-                            <span className="font-mono text-white/50">{p.permission}</span>
+                          <li key={p.permission} className="flex items-baseline gap-1.5 text-[11.5px] text-ink/35">
+                            <span className="font-mono text-ink/50">{p.permission}</span>
                             <span>— {p.justification}</span>
                           </li>
                         ))}
@@ -163,7 +163,7 @@ export function ExtensionsPane() {
                         <button
                           type="button"
                           onClick={() => setConfirmUninstall(ext.id)}
-                          className="text-[11.5px] text-white/30 transition-colors hover:text-rose-300"
+                          className="text-[11.5px] text-ink/30 transition-colors hover:text-rose-300"
                         >
                           Uninstall
                         </button>

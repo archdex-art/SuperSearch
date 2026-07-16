@@ -30,11 +30,11 @@ export function Toggle({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={`relative h-[22px] w-[38px] shrink-0 rounded-full transition-colors duration-150 ${
-        checked ? "bg-accent/80" : "bg-white/[0.12]"
+        checked ? "bg-accent/80" : "bg-ink/[0.12]"
       }`}
     >
       <span
-        className={`absolute top-[3px] h-4 w-4 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.4)] transition-transform duration-150 ${
+        className={`absolute left-0 top-[3px] h-4 w-4 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.4)] transition-transform duration-150 ${
           checked ? "translate-x-[19px]" : "translate-x-[3px]"
         }`}
       />
@@ -46,8 +46,8 @@ export function Toggle({
   return (
     <label className={`flex items-center justify-between gap-4 py-3 ${disabled ? "opacity-40" : "cursor-pointer"}`}>
       <span className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-[13.5px] font-medium text-white/90">{label}</span>
-        {description && <span className="text-[12px] leading-snug text-white/40">{description}</span>}
+        <span className="text-[13.5px] font-medium text-ink/90">{label}</span>
+        {description && <span className="text-[12px] leading-snug text-ink/40">{description}</span>}
       </span>
       {switchEl}
     </label>
@@ -70,7 +70,7 @@ export function Button({
 }) {
   const styles: Record<typeof variant, string> = {
     primary: "border-accent/40 bg-accent/[0.14] text-accent hover:bg-accent/[0.2]",
-    secondary: "border-white/[0.1] bg-white/[0.05] text-white/75 hover:bg-white/[0.08] hover:text-white/95",
+    secondary: "border-ink/[0.1] bg-ink/[0.05] text-ink/75 hover:bg-ink/[0.08] hover:text-ink/95",
     danger: "border-rose-400/30 bg-rose-500/[0.1] text-rose-200 hover:bg-rose-500/[0.16]",
   };
   return (
@@ -95,7 +95,7 @@ export function SectionHeading({ children }: { children: ReactNode }) {
 
 export function Card({ children }: { children: ReactNode }) {
   return (
-    <div className="divide-y divide-white/[0.06] rounded-xl border border-white/[0.07] bg-white/[0.025] px-4">
+    <div className="divide-y divide-ink/[0.06] rounded-xl border border-ink/[0.07] bg-ink/[0.025] px-4">
       {children}
     </div>
   );
@@ -107,7 +107,7 @@ export function Row({ children }: { children: ReactNode }) {
 
 export function Pill({ tone = "neutral", children }: { tone?: "neutral" | "amber" | "rose"; children: ReactNode }) {
   const styles: Record<typeof tone, string> = {
-    neutral: "bg-white/[0.07] text-white/50 ring-white/[0.08]",
+    neutral: "bg-ink/[0.07] text-ink/50 ring-ink/[0.08]",
     amber: "bg-accent/10 text-accent/90 ring-accent/25",
     rose: "bg-rose-500/10 text-rose-200/90 ring-rose-300/25",
   };
