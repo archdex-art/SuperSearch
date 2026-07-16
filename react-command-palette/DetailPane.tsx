@@ -13,9 +13,9 @@ export function DetailPane({ action }: { action?: CommandAction }) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-white/35">
         <span className="relative flex h-10 w-10 items-center justify-center">
-          <span className="absolute inset-0 animate-pulse rounded-full bg-amber-400/10 blur-md" />
-          <span className="absolute h-7 w-7 rounded-full border border-amber-300/20" />
-          <span className="relative h-1.5 w-1.5 rounded-full bg-amber-300 shadow-[0_0_8px_1px_rgba(245,166,35,0.55)]" />
+          <span className="absolute inset-0 animate-pulse rounded-full bg-accent/10 blur-md" />
+          <span className="absolute h-7 w-7 rounded-full border border-accent/20" />
+          <span className="relative h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_8px_1px_rgba(245,166,35,0.55)]" />
         </span>
         <span className="text-[13px]">Select a result to see details</span>
       </div>
@@ -56,7 +56,7 @@ export function DetailPane({ action }: { action?: CommandAction }) {
       <div className="border-t border-white/[0.06]" />
 
       <div className="flex flex-col gap-3 pt-4">
-        <span className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-amber-200/40">Information</span>
+        <span className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-accent/40">Information</span>
         <DetailRow label="Category" value={category} dot={style.dot} />
         <DetailRow label="Action" value={verb} />
         {action.subtitle && (

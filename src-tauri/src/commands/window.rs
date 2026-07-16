@@ -11,3 +11,11 @@ use tauri::command;
 pub fn hide_window(window: tauri::Window) -> Result<(), String> {
     window.hide().map_err(|error| error.to_string())
 }
+
+/// Open (or focus) the settings window — the "separate app" preferences
+/// surface (hotkey, appearance, extensions). See `crate::open_settings_window`
+/// for the lazy-build + Dock-activation-policy details.
+#[command]
+pub fn open_settings_window(app: tauri::AppHandle) -> Result<(), String> {
+    crate::open_settings_window(&app).map_err(|e| e.to_string())
+}

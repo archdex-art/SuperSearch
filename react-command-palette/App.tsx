@@ -16,6 +16,7 @@ import {
   reducedVariants,
 } from "./variants";
 import { invoke, listen, type BackendResult } from "./bridge";
+import { applyAccent } from "./theme";
 import type { CommandAction } from "./types";
 
 /** A palette row plus how to run it. */
@@ -148,6 +149,28 @@ export default function App() {
     };
   }, []);
 
+  // Apply the persisted accent on boot, then keep it live: the settings
+  // window broadcasts `settings-changed` on every save, so a color picked
+  // there repaints the palette immediately — no reopen required.
+  useEffect(() => {
+    void invoke<{ accent_color?: string | null }>("get_settings").then((s) => applyAccent(s.accent_color));
+    let un: undefined | (() => void);
+    let cancelled = false;
+    listen<{ accent_color?: string | null }>("supersearch://settings-changed", (s) => {
+      applyAccent(s.accent_color);
+    }).then((fn) => {
+      if (cancelled) {
+        fn();
+      } else {
+        un = fn;
+      }
+    });
+    return () => {
+      cancelled = true;
+      un?.();
+    };
+  }, []);
+
   // Rust-initiated, unconditional dismissal (blur-hide) — always animates
   // closed, same as Escape/selecting a result.
   useEffect(() => {
@@ -266,6 +289,12 @@ export default function App() {
         case "End": e.preventDefault(); setActiveIndex(n - 1); scrollInto(n - 1); break;
         case "Enter": e.preventDefault(); choose(filteredRows[activeIndex]); break;
         case "Escape": e.preventDefault(); hide(); break;
+        case ",":
+          if (e.metaKey || e.ctrlKey) {
+            e.preventDefault();
+            void invoke("open_settings_window");
+          }
+          break;
       }
     },
     [filteredRows, activeIndex, choose, hide, scrollInto, filterOpen],
@@ -289,7 +318,7 @@ export default function App() {
           <div
             role="dialog"
             aria-label="SuperSearch"
-            className="relative flex h-full w-full flex-col overflow-hidden rounded-[16px] border border-amber-300/[0.14]
+            className="relative flex h-full w-full flex-col overflow-hidden rounded-[16px] border border-accent/[0.14]
                        bg-[hsla(32,14%,6%,0.88)] ring-1 ring-inset ring-white/[0.04] backdrop-blur-2xl"
           >
             {/* Schematic grid + grain — reads as an instrument surface, not a flat blur. */}
@@ -310,7 +339,7 @@ export default function App() {
                 stroke="currentColor"
                 strokeWidth={2}
                 strokeLinecap="round"
-                className={`h-5 w-5 shrink-0 transition-colors duration-200 ${query ? "text-amber-300" : "text-white/35"}`}
+                className={`h-5 w-5 shrink-0 transition-colors duration-200 ${query ? "text-accent" : "text-white/35"}`}
                 aria-hidden
               >
                 <circle cx="8.5" cy="8.5" r="5.5" /><line x1="13" y1="13" x2="18" y2="18" />
@@ -326,7 +355,7 @@ export default function App() {
                 aria-controls={`${baseId}-list`}
                 aria-activedescendant={filteredRows.length ? `${baseId}-opt-${activeIndex}` : undefined}
                 autoComplete="off" autoCorrect="off" spellCheck={false}
-                className="h-full flex-1 bg-transparent text-[18px] font-normal outline-none caret-amber-400 placeholder:text-white/35"
+                className="h-full flex-1 bg-transparent text-[18px] font-normal outline-none caret-accent placeholder:text-white/35"
               />
               {rows.length > 0 && (
                 <span className="shrink-0 rounded-full bg-white/[0.06] px-2.5 py-1 font-mono text-[11px] font-medium text-white/40 ring-1 ring-inset ring-white/[0.06]">
@@ -350,9 +379,9 @@ export default function App() {
                 {filteredRows.length === 0 ? (
                   <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-white/40">
                     <span className="relative flex h-10 w-10 items-center justify-center">
-                      <span className="absolute inset-0 animate-pulse rounded-full bg-amber-400/10 blur-md" />
-                      <span className="absolute h-7 w-7 rounded-full border border-amber-300/20" />
-                      <span className="relative h-1.5 w-1.5 rounded-full bg-amber-300 shadow-[0_0_8px_1px_rgba(245,166,35,0.55)]" />
+                      <span className="absolute inset-0 animate-pulse rounded-full bg-accent/10 blur-md" />
+                      <span className="absolute h-7 w-7 rounded-full border border-accent/20" />
+                      <span className="relative h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_8px_1px_rgba(245,166,35,0.55)]" />
                     </span>
                     <span className="text-[13px]">
                       {query
@@ -431,6 +460,18 @@ export default function App() {
               <FooterHint k="↑↓" label="Navigate" />
               <FooterHint k="↵" label={activeRow?.hint ?? "Open"} />
               <FooterHint k="esc" label="Close" />
+              <button
+                type="button"
+                onClick={() => void invoke("open_settings_window")}
+                title="Settings (⌘,)"
+                aria-label="Open Settings"
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-white/35 transition-colors hover:bg-white/[0.08] hover:text-white/70"
+              >
+                <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <circle cx="8" cy="8" r="2" />
+                  <path d="M8 1.6v1.5M8 12.9v1.5M14.4 8h-1.5M3.1 8H1.6M12.5 3.5l-1 1M4.5 11.5l-1 1M12.5 12.5l-1-1M4.5 4.5l-1-1" />
+                </svg>
+              </button>
             </div>
           </div>
         </div>
@@ -442,7 +483,7 @@ export default function App() {
 function FooterHint({ k, label }: { k: string; label: string }) {
   return (
     <span className="flex items-center gap-1.5">
-      <kbd className="rounded-[5px] border border-amber-300/20 bg-amber-400/[0.08] px-1.5 py-0.5 font-mono text-[11px] text-white/70">{k}</kbd>
+      <kbd className="rounded-[5px] border border-accent/20 bg-accent/[0.08] px-1.5 py-0.5 font-mono text-[11px] text-white/70">{k}</kbd>
       <span className="text-white/40">{label}</span>
     </span>
   );
@@ -450,8 +491,8 @@ function FooterHint({ k, label }: { k: string; label: string }) {
 
 function BrandMark() {
   return (
-    <span className="relative flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-amber-300/40 bg-amber-400/[0.07]">
-      <span className="h-[3px] w-[3px] rounded-full bg-amber-300 shadow-[0_0_6px_1px_rgba(245,166,35,0.7)]" />
+    <span className="relative flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-accent/40 bg-accent/[0.07]">
+      <span className="h-[3px] w-[3px] rounded-full bg-accent shadow-[0_0_6px_1px_rgba(245,166,35,0.7)]" />
     </span>
   );
 }
@@ -460,7 +501,7 @@ function BrandMark() {
  *  frame's signature detail, echoing the "instrument" identity instead of
  *  a soft glow. Purely decorative: absolutely positioned, no pointer events. */
 function HudCorners() {
-  const base = "pointer-events-none absolute z-10 h-2.5 w-2.5 border-amber-300/25";
+  const base = "pointer-events-none absolute z-10 h-2.5 w-2.5 border-accent/25";
   return (
     <>
       <span className={`${base} left-2.5 top-2.5 border-l border-t`} />
@@ -512,7 +553,7 @@ function TypeFilter({
 
       {open && (
         <div
-          className="absolute right-0 top-[calc(100%+6px)] z-20 min-w-[152px] overflow-hidden rounded-xl border border-amber-300/[0.12]
+          className="absolute right-0 top-[calc(100%+6px)] z-20 min-w-[152px] overflow-hidden rounded-xl border border-accent/[0.12]
                      bg-[hsla(32,14%,7%,0.97)] py-1 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.6)] backdrop-blur-xl"
         >
           <FilterOption

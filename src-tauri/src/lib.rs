@@ -213,7 +213,7 @@ fn toggle_palette(app: &tauri::AppHandle) {
 /// sometimes just doesn't fire." Refusing the binding outright beats
 /// accepting one that will flake in the field.
 #[cfg(target_os = "macos")]
-fn is_reserved_macos_shortcut(shortcut: &str) -> bool {
+pub(crate) fn is_reserved_macos_shortcut(shortcut: &str) -> bool {
     let mut mods: Vec<&str> = Vec::new();
     let mut key = "";
     for part in shortcut.split('+') {
@@ -231,7 +231,7 @@ fn is_reserved_macos_shortcut(shortcut: &str) -> bool {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn is_reserved_macos_shortcut(_shortcut: &str) -> bool {
+pub(crate) fn is_reserved_macos_shortcut(_shortcut: &str) -> bool {
     false
 }
 
@@ -259,6 +259,74 @@ pub(crate) fn register_toggle(app: &tauri::AppHandle, shortcut: &str) -> Result<
 pub(crate) fn rebind_toggle(app: &tauri::AppHandle, old: &str, new: &str) -> Result<(), String> {
     let _ = app.global_shortcut().unregister(old);
     register_toggle(app, new)
+}
+
+/// Switch the app to a normal, Dock-visible activation policy. Called while
+/// the settings window is open — the palette itself stays an accessory
+/// (Dock-less) app the rest of the time, but its preferences window should
+/// behave like an ordinary window: focusable via ⌘-Tab, closable, with a
+/// Dock icon. No-op on non-macOS (Dock/activation policy is a macOS concept;
+/// other platforms show a normal taskbar window regardless).
+#[cfg(target_os = "macos")]
+fn set_activation_policy_regular(app: &tauri::AppHandle) {
+    let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
+}
+#[cfg(not(target_os = "macos"))]
+fn set_activation_policy_regular(_app: &tauri::AppHandle) {}
+
+/// Drop back to the accessory (Dock-less) policy once nothing needs a Dock
+/// icon anymore. See [`set_activation_policy_regular`].
+#[cfg(target_os = "macos")]
+fn set_activation_policy_accessory(app: &tauri::AppHandle) {
+    let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+}
+#[cfg(not(target_os = "macos"))]
+fn set_activation_policy_accessory(_app: &tauri::AppHandle) {}
+
+/// Open (or focus, if already open) the settings window. Lazily built on
+/// first call — most sessions never open it, so there's no reason to pay
+/// for a second WebView at every launch. Decorated and resizable, unlike
+/// the frameless palette `main` window: this one is a normal preferences
+/// window, not a Spotlight-style overlay.
+pub(crate) fn open_settings_window(app: &tauri::AppHandle) -> tauri::Result<()> {
+    if let Some(window) = app.get_webview_window("settings") {
+        set_activation_policy_regular(app);
+        window.show()?;
+        window.set_focus()?;
+        return Ok(());
+    }
+
+    let window = tauri::WebviewWindowBuilder::new(
+        app,
+        "settings",
+        tauri::WebviewUrl::App("settings.html".into()),
+    )
+    .title("SuperSearch Settings")
+    .inner_size(760.0, 560.0)
+    .min_inner_size(640.0, 460.0)
+    .resizable(true)
+    .decorations(true)
+    .transparent(false)
+    .accept_first_mouse(true)
+    .build()?;
+
+    set_activation_policy_regular(app);
+
+    // Hide (don't destroy) on close so the selected section/scroll position
+    // survive a reopen, cheaply — and only then drop back to an accessory
+    // app, so the Dock icon disappears exactly when nothing needs it.
+    let app_handle = app.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            if let Some(w) = app_handle.get_webview_window("settings") {
+                let _ = w.hide();
+            }
+            set_activation_policy_accessory(&app_handle);
+        }
+    });
+
+    Ok(())
 }
 
 /// Build and configure the Tauri application.
@@ -307,6 +375,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::actions::execute_action,
             commands::window::hide_window,
+            commands::window::open_settings_window,
             commands::telemetry::get_telemetry,
             commands::search::search_query,
             commands::agent::agent_query,
@@ -318,8 +387,10 @@ pub fn run() {
             commands::extensions::set_extension_trusted,
             commands::extensions::query_extensions,
             commands::extensions::execute_extension_action,
+            commands::extensions::pick_extension_dir,
             commands::settings::get_settings,
             commands::settings::update_settings,
+            commands::settings::validate_shortcut,
             commands::journal::get_journal_summary,
             commands::updater::check_for_updates,
         ]);

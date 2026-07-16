@@ -205,7 +205,7 @@ export function CommandPalette({
                 aria-modal="true"
                 aria-label="Command palette"
                 onKeyDown={onKeyDown}
-                className="relative overflow-hidden rounded-[16px] border border-amber-300/[0.14]
+                className="relative overflow-hidden rounded-[16px] border border-accent/[0.14]
                            bg-[hsla(32,14%,6%,0.88)] ring-1 ring-inset ring-white/[0.04] backdrop-blur-2xl"
               >
                 <div className="hud-grid pointer-events-none absolute inset-0" />
@@ -235,7 +235,7 @@ export function CommandPalette({
                     autoCorrect="off"
                     spellCheck={false}
                     className="h-full flex-1 bg-transparent text-[18px] font-normal text-white
-                               caret-amber-400 outline-none placeholder:text-white/35"
+                               caret-accent outline-none placeholder:text-white/35"
                   />
                 </div>
 
@@ -255,9 +255,9 @@ export function CommandPalette({
                         {emptyState ?? (
                           <>
                             <span className="relative flex h-10 w-10 items-center justify-center">
-                              <span className="absolute inset-0 animate-pulse rounded-full bg-amber-400/10 blur-md" />
-                              <span className="absolute h-7 w-7 rounded-full border border-amber-300/20" />
-                              <span className="relative h-1.5 w-1.5 rounded-full bg-amber-300 shadow-[0_0_8px_1px_rgba(245,166,35,0.55)]" />
+                              <span className="absolute inset-0 animate-pulse rounded-full bg-accent/10 blur-md" />
+                              <span className="absolute h-7 w-7 rounded-full border border-accent/20" />
+                              <span className="relative h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_8px_1px_rgba(245,166,35,0.55)]" />
                             </span>
                             <span className="text-[13px]">No results</span>
                           </>
@@ -315,7 +315,7 @@ export function CommandPalette({
 function Hint({ k, label }: { k: string; label: string }) {
   return (
     <span className="flex items-center gap-1.5">
-      <kbd className="rounded-[5px] border border-amber-300/20 bg-amber-400/[0.08] px-1.5 py-0.5 font-mono text-[11px] text-white/70">
+      <kbd className="rounded-[5px] border border-accent/20 bg-accent/[0.08] px-1.5 py-0.5 font-mono text-[11px] text-white/70">
         {k}
       </kbd>
       <span className="text-white/40">{label}</span>
@@ -325,15 +325,15 @@ function Hint({ k, label }: { k: string; label: string }) {
 
 function BrandMark() {
   return (
-    <span className="relative flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-amber-300/40 bg-amber-400/[0.07]">
-      <span className="h-[3px] w-[3px] rounded-full bg-amber-300 shadow-[0_0_6px_1px_rgba(245,166,35,0.7)]" />
+    <span className="relative flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-accent/40 bg-accent/[0.07]">
+      <span className="h-[3px] w-[3px] rounded-full bg-accent shadow-[0_0_6px_1px_rgba(245,166,35,0.7)]" />
     </span>
   );
 }
 
 /** Four viewfinder-style corner ticks inset from the panel's edges. */
 function HudCorners() {
-  const base = "pointer-events-none absolute z-10 h-2.5 w-2.5 border-amber-300/25";
+  const base = "pointer-events-none absolute z-10 h-2.5 w-2.5 border-accent/25";
   return (
     <>
       <span className={`${base} left-2.5 top-2.5 border-l border-t`} />
@@ -352,7 +352,7 @@ function SearchIcon({ active }: { active?: boolean }) {
       stroke="currentColor"
       strokeWidth={2}
       strokeLinecap="round"
-      className={`h-5 w-5 shrink-0 transition-colors duration-200 ${active ? "text-amber-300" : "text-white/35"}`}
+      className={`h-5 w-5 shrink-0 transition-colors duration-200 ${active ? "text-accent" : "text-white/35"}`}
       aria-hidden
     >
       <circle cx="8.5" cy="8.5" r="5.5" />

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicegui/nicegui/master/nicegui/json_schema/tauri-acl-schema.json",
+  "identifier": "settings",
+  "description": "Capabilities for the SuperSearch Settings window",
+  "windows": ["settings"],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:window:allow-close",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "core:window:allow-set-size",
+    "dialog:default",
+    "dialog:allow-open"
+  ]
+}

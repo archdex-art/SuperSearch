@@ -7,7 +7,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use tauri::command;
+use tauri::{command, AppHandle};
+use tauri_plugin_dialog::DialogExt;
 
 use supersearch_runtime::extension::{
     ExtensionAction, ExtensionInfo, ExtensionQueryHit, ExtensionRegistry,
@@ -85,4 +86,21 @@ pub async fn execute_extension_action(
     tokio::task::spawn_blocking(move || registry.execute_action(&id, &action).map_err(|e| e.to_string()))
         .await
         .map_err(|e| format!("extension action task panicked: {e}"))?
+}
+
+/// Open a native folder picker for "install an extension from this
+/// directory". Returns `None` if the user cancelled. Runs on a blocking
+/// thread — the native dialog blocks the calling thread until dismissed,
+/// which would otherwise freeze the settings window's WebView main thread.
+#[command]
+pub async fn pick_extension_dir(app: AppHandle) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .blocking_pick_folder()
+            .and_then(|p| p.into_path().ok())
+            .map(|p| p.to_string_lossy().into_owned())
+    })
+    .await
+    .map_err(|e| format!("folder picker task panicked: {e}"))
 }

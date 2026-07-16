@@ -5,6 +5,29 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versions
 correspond to [GitHub Releases](https://github.com/archdex-art/SuperSearch/releases)
 and their published installers.
 
+## [0.1.10] — 2026-07-16
+
+Adds a proper Settings window instead of relying on defaults baked into
+`settings.json` by hand.
+
+### Added
+- **Settings window.** `open_settings_window` (wired to the palette's gear
+  icon and ⌘,) lazily builds a decorated, resizable preferences window
+  separate from the frameless palette overlay. Opening it switches the app's
+  macOS activation policy to `Regular` (Dock icon + ⌘-Tab visibility); it
+  drops back to `Accessory` when the window is hidden, so the palette stays
+  Dock-less the rest of the time. The window hides (not destroys) on close,
+  preserving scroll/section state across reopens.
+- **Accent color customization.** `Settings.accent_color` (optional
+  `#RRGGBB` string) overrides the built-in amber "Instrument" identity.
+  `theme.ts:applyAccent()` writes it to the shared `--accent-rgb` CSS
+  variable both windows read from; the palette repaints live via the new
+  `supersearch://settings-changed` event, no reopen needed. Settings files
+  written before this field existed still load, defaulting to `None`.
+- **Install extension from folder.** A native folder-picker command
+  (`tauri-plugin-dialog`, run on a blocking thread so it can't freeze the
+  settings WebView) for installing an extension by directory.
+
 ## [0.1.9] — 2026-07-16
 
 Guards against a second, unfixable-in-app-code source of the "hotkey
@@ -232,7 +255,8 @@ First cross-platform release — macOS, Linux, and Windows.
 
 ---
 
-[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.9...HEAD
+[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.10...HEAD
+[0.1.10]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.10
 [0.1.9]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.9
 [0.1.8]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.8
 [0.1.7]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.7

@@ -72,9 +72,9 @@ export interface CategoryStyle {
 
 const STYLES: Record<string, CategoryStyle> = {
   agent: {
-    chip: "bg-gradient-to-br from-amber-400/30 to-amber-500/10 ring-1 ring-inset ring-amber-300/30",
-    bar: "bg-gradient-to-b from-amber-300 to-amber-500",
-    dot: "bg-amber-300",
+    chip: "bg-gradient-to-br from-accent/30 to-accent/10 ring-1 ring-inset ring-accent/30",
+    bar: "bg-accent",
+    dot: "bg-accent",
   },
   command: {
     chip: "bg-gradient-to-br from-cyan-400/30 to-cyan-500/10 ring-1 ring-inset ring-cyan-300/25",

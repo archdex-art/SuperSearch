@@ -38,8 +38,8 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
   return mock(cmd, args) as T;
 }
 
-export async function listen(event: string, cb: () => void): Promise<UnlistenFn> {
-  if (isTauri) return tauriListen(event, cb);
+export async function listen<T = unknown>(event: string, cb: (payload: T) => void): Promise<UnlistenFn> {
+  if (isTauri) return tauriListen<T>(event, (e) => cb(e.payload));
   return () => {};
 }
 
@@ -72,7 +72,7 @@ function mock(cmd: string, args?: Record<string, unknown>): unknown {
     case "hide_window":
       return null;
     case "get_settings":
-      return { toggle_shortcut: "Alt+Space", hide_on_blur: true, theme: "dark" };
+      return { toggle_shortcut: "Alt+Space", hide_on_blur: true, theme: "dark", accent_color: null };
     default:
       return null;
   }

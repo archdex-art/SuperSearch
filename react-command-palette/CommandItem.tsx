@@ -57,8 +57,8 @@ function CommandItemBase({
         <motion.div
           layoutId="cmd-highlight"
           transition={highlightTransition}
-          className="absolute inset-0 overflow-hidden rounded-xl bg-gradient-to-r from-amber-400/[0.08] via-white/[0.05] to-transparent
-                     ring-1 ring-inset ring-amber-200/[0.14] shadow-[0_1px_0_0_rgba(255,255,255,0.06)_inset]"
+          className="absolute inset-0 overflow-hidden rounded-xl bg-gradient-to-r from-accent/[0.08] via-white/[0.05] to-transparent
+                     ring-1 ring-inset ring-accent/[0.14] shadow-[0_1px_0_0_rgba(255,255,255,0.06)_inset]"
         >
           <span className={`absolute inset-y-2 left-0 w-[3px] rounded-full ${style.bar}`} />
         </motion.div>
@@ -96,7 +96,7 @@ function CommandItemBase({
           className="flex items-center gap-2 text-[13px] text-white/55"
         >
           {action.hint && !compact && <span>{action.hint}</span>}
-          <kbd className="rounded-md border border-amber-300/25 bg-amber-400/10 px-1.5 py-0.5 font-mono text-[11px] text-amber-100/90">
+          <kbd className="rounded-md border border-accent/25 bg-accent/10 px-1.5 py-0.5 font-mono text-[11px] text-accent/90">
             ↵
           </kbd>
         </motion.span>

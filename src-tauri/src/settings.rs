@@ -26,8 +26,15 @@ pub struct Settings {
     pub toggle_shortcut: String,
     /// Hide the palette automatically when it loses focus (Spotlight-style).
     pub hide_on_blur: bool,
-    /// UI theme identifier (the frontend interprets this).
+    /// Base UI theme identifier (the frontend interprets this — "dark" is
+    /// the only built-in today).
     pub theme: String,
+    /// Accent hex color (e.g. "#f5a623") overriding the built-in amber
+    /// identity. `None` = use the default. Validated as `#RRGGBB` client-side
+    /// (the settings UI's color picker); stored as an opaque string here
+    /// since the palette only ever consumes it as a CSS value.
+    #[serde(default)]
+    pub accent_color: Option<String>,
 }
 
 impl Default for Settings {
@@ -36,6 +43,7 @@ impl Default for Settings {
             toggle_shortcut: DEFAULT_TOGGLE_SHORTCUT.into(),
             hide_on_blur: true,
             theme: "dark".into(),
+            accent_color: None,
         }
     }
 }
@@ -91,7 +99,12 @@ mod tests {
         assert!(s.hide_on_blur);
 
         store
-            .set(Settings { toggle_shortcut: "CommandOrControl+Space".into(), hide_on_blur: false, theme: "light".into() })
+            .set(Settings {
+                toggle_shortcut: "CommandOrControl+Space".into(),
+                hide_on_blur: false,
+                theme: "light".into(),
+                accent_color: Some("#22d3ee".into()),
+            })
             .unwrap();
 
         // A fresh store reading the same dir sees the persisted values.
@@ -100,5 +113,22 @@ mod tests {
         assert_eq!(r.toggle_shortcut, "CommandOrControl+Space");
         assert!(!r.hide_on_blur);
         assert_eq!(r.theme, "light");
+        assert_eq!(r.accent_color.as_deref(), Some("#22d3ee"));
+    }
+
+    #[test]
+    fn old_settings_file_without_accent_color_still_loads() {
+        // Simulates a settings.json written before `accent_color` existed —
+        // `#[serde(default)]` on the struct must fill it in as `None` rather
+        // than fail to deserialize the whole file.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("settings.json"),
+            r#"{"toggle_shortcut":"Alt+Space","hide_on_blur":true,"theme":"dark"}"#,
+        )
+        .unwrap();
+        let s = SettingsStore::load(dir.path().to_path_buf()).get();
+        assert_eq!(s.toggle_shortcut, "Alt+Space");
+        assert_eq!(s.accent_color, None);
     }
 }

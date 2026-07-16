@@ -70,6 +70,13 @@
   src: url("/fonts/martian-mono-700.ttf") format("truetype");
 }
 
+/* Default accent (the "Instrument" amber). Overwritten at runtime by
+   theme.ts:applyAccent() from Settings.accent_color — this is only the
+   pre-JS/no-settings fallback, and what browser dev preview uses. */
+:root {
+  --accent-rgb: 245 166 35;
+}
+
 html,
 body,
 #root {
