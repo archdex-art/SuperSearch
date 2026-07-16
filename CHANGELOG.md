@@ -5,6 +5,23 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versions
 correspond to [GitHub Releases](https://github.com/archdex-art/SuperSearch/releases)
 and their published installers.
 
+## [0.1.8] — 2026-07-16
+
+Fixes a race between the new exit animation (0.1.7) and the global summon
+hotkey that made it seem like the hotkey "sometimes" did nothing.
+
+### Fixed
+- **Hotkey swallowed during the close animation.** `window.is_visible()`
+  stays `true` for the whole ~150ms exit transition (the native
+  `window.hide()` only fires once it finishes), so a hotkey press that
+  landed in that window was read as "still open, close it again" instead of
+  "reopen" — the press appeared to do nothing. The global-shortcut path now
+  emits a distinct `supersearch://toggle-request` event; the frontend (the
+  only side that knows whether it's genuinely idle-open or mid-close)
+  decides whether that means finish closing or cancel back to visible.
+  Escape, selecting a result, and blur-hide are unaffected — those always
+  close.
+
 ## [0.1.7] — 2026-07-16
 
 Visual identity overhaul, and a genuinely animated summon/dismiss instead of
@@ -196,7 +213,8 @@ First cross-platform release — macOS, Linux, and Windows.
 
 ---
 
-[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.7...HEAD
+[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.8...HEAD
+[0.1.8]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.8
 [0.1.7]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.7
 [0.1.6]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.6
 [0.1.5]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.5

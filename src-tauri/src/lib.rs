@@ -188,10 +188,14 @@ fn show_palette(window: &tauri::WebviewWindow) {
 fn toggle_palette(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         if window.is_visible().unwrap_or(false) {
-            // Tell the UI to animate closed first; it calls `hide_window` (the
-            // actual `window.hide()`) once the exit transition finishes, so the
-            // hotkey-toggle-while-open path is as smooth as Escape/selection.
-            let _ = window.emit("supersearch://request-close", ());
+            // `window.is_visible()` stays true for the whole ~150ms exit
+            // animation (the real `window.hide()` only happens once the
+            // frontend's `hide_window` call lands), so a second hotkey press
+            // during that window can't be told apart from "genuinely open"
+            // here. Emit a distinct event so the frontend — which *does*
+            // know whether it's mid-close — can decide: cancel back open, or
+            // finish closing. See the "toggle-request" listener in App.tsx.
+            let _ = window.emit("supersearch://toggle-request", ());
         } else {
             show_palette(&window);
         }

@@ -45,6 +45,13 @@ export default function App() {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const baseId = useId();
+  // Mirrors `closing` for the toggle-hotkey listener below, which is
+  // registered once and would otherwise read a stale value out of a closure
+  // captured on first mount.
+  const closingRef = useRef(false);
+  useEffect(() => {
+    closingRef.current = closing;
+  }, [closing]);
 
   const hide = useCallback(() => setClosing(true), []);
 
@@ -141,13 +148,43 @@ export default function App() {
     };
   }, []);
 
-  // Rust-initiated dismissals (hotkey toggle while open, blur-hide) can't
-  // call `hide()` directly — they route through this event so the exit
-  // animation still plays before the window actually disappears.
+  // Rust-initiated, unconditional dismissal (blur-hide) — always animates
+  // closed, same as Escape/selecting a result.
   useEffect(() => {
     let un: undefined | (() => void);
     let cancelled = false;
     listen("supersearch://request-close", () => hide()).then((fn) => {
+      if (cancelled) {
+        fn();
+      } else {
+        un = fn;
+      }
+    });
+    return () => {
+      cancelled = true;
+      un?.();
+    };
+  }, [hide]);
+
+  // The global hotkey toggling while the window is still visible has two
+  // cases Rust can't distinguish on its own (it only knows OS-level
+  // visibility, which stays true for the whole exit animation): if we're
+  // genuinely idle-open, this is a normal close. But if a close is already
+  // *animating out* (closing === true) — e.g. the user double-tapped the
+  // hotkey — snapping shut again would just look like the hotkey didn't do
+  // anything; instead cancel the exit and let Framer Motion smoothly
+  // retarget back to "visible" from wherever the panel currently is.
+  useEffect(() => {
+    let un: undefined | (() => void);
+    let cancelled = false;
+    listen("supersearch://toggle-request", () => {
+      if (closingRef.current) {
+        setClosing(false);
+        requestAnimationFrame(() => inputRef.current?.focus());
+      } else {
+        hide();
+      }
+    }).then((fn) => {
       if (cancelled) {
         fn();
       } else {
