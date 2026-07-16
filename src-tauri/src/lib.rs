@@ -391,6 +391,8 @@ pub fn run() {
             commands::settings::get_settings,
             commands::settings::update_settings,
             commands::settings::validate_shortcut,
+            commands::settings::suspend_toggle_shortcut,
+            commands::settings::resume_toggle_shortcut,
             commands::journal::get_journal_summary,
             commands::updater::check_for_updates,
         ]);

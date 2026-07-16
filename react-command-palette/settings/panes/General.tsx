@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Settings } from "../types";
-import { validateShortcut } from "../ipc";
+import { resumeToggleShortcut, suspendToggleShortcut, validateShortcut } from "../ipc";
 import { Card, Row, SectionHeading, Toggle } from "../ui";
 
 /** Modifier key labels shown while capturing, in a stable display order. */
@@ -41,8 +41,14 @@ export function GeneralPane({
   const [checking, setChecking] = useState(false);
   const captureRef = useRef<HTMLButtonElement>(null);
 
+  // Suspend the OS-level global hotkey for the duration of a capture
+  // session — otherwise pressing the combo currently bound (or any combo
+  // macOS/Tauri already intercepts) never reaches this keydown listener,
+  // and "Listening…" looks permanently stuck instead of capturing.
   useEffect(() => {
     if (!capturing) return;
+    let live = true;
+    void suspendToggleShortcut();
     const onKeyDown = (e: KeyboardEvent) => {
       e.preventDefault();
       if (e.key === "Escape") {
@@ -61,7 +67,14 @@ export function GeneralPane({
         .finally(() => setChecking(false));
     };
     window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      // Re-arm immediately on cancel/unmount; on a successful capture the
+      // pending `update_settings` call re-registers the *new* shortcut, so
+      // resuming the old one here would just be clobbered a moment later.
+      if (live) void resumeToggleShortcut();
+      live = false;
+    };
   }, [capturing, onChange]);
 
   const startCapture = useCallback(() => {
@@ -77,8 +90,8 @@ export function GeneralPane({
         <Card>
           <Row>
             <span className="flex flex-col gap-0.5">
-              <span className="text-[13.5px] font-medium text-white/90">Summon SuperSearch</span>
-              <span className="text-[12px] text-white/40">
+              <span className="text-[13.5px] font-medium text-ink/90">Summon SuperSearch</span>
+              <span className="text-[12px] text-ink/40">
                 {capturing ? "Press a key combination… (Esc to cancel)" : "Click, then press your new shortcut"}
               </span>
             </span>
@@ -89,14 +102,14 @@ export function GeneralPane({
               className={`min-w-[140px] rounded-lg border px-3 py-1.5 text-center font-mono text-[12.5px] transition-colors ${
                 capturing
                   ? "border-accent/50 bg-accent/[0.12] text-accent"
-                  : "border-white/[0.1] bg-white/[0.05] text-white/80 hover:bg-white/[0.08]"
+                  : "border-ink/[0.1] bg-ink/[0.05] text-ink/80 hover:bg-ink/[0.08]"
               }`}
             >
               {capturing ? "Listening…" : settings.toggle_shortcut}
             </button>
           </Row>
           <div aria-live="polite">
-            {checking && <div className="pb-3 text-[12px] text-white/40">Checking…</div>}
+            {checking && <div className="pb-3 text-[12px] text-ink/40">Checking…</div>}
             {check && !check.ok && (
               <div className="flex items-start gap-2 pb-3 text-[12px] leading-snug text-rose-300/90">
                 <span className="mt-[3px] h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400" />

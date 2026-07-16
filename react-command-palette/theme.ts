@@ -27,3 +27,12 @@ export function applyAccent(hex: string | null | undefined): void {
     hex ? hexToRgbTriple(hex) : DEFAULT_ACCENT_RGB,
   );
 }
+
+/** Apply the base UI theme ("dark" | "light") as a `data-theme` attribute on
+ *  `<html>`. Every `ink`/`canvas` Tailwind color (see tailwind.config.js)
+ *  reads its RGB triple from the CSS variables `styles.css` defines per
+ *  attribute value, so this repaints every themed surface in the settings
+ *  window instantly — no reload, no per-component branching. */
+export function applyTheme(theme: string | null | undefined): void {
+  document.documentElement.setAttribute("data-theme", theme === "light" ? "light" : "dark");
+}

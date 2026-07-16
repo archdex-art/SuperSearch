@@ -5,6 +5,34 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versions
 correspond to [GitHub Releases](https://github.com/archdex-art/SuperSearch/releases)
 and their published installers.
 
+## [0.1.12] — 2026-07-17
+
+Fixes two settings-window bugs found during a UI pass, and adds a real
+light/dark base theme alongside the existing accent picker.
+
+### Fixed
+- **Behavior toggle switch overflowed its track.** The switch thumb had no
+  base horizontal anchor (`left`), so the browser fell back to a
+  static-position heuristic that rendered it flush against — and partly
+  outside — the track's right edge in the checked state. Anchored with
+  `left-0` so `translate-x-*` offsets are relative to a known origin.
+- **Global hotkey capture looked stuck on "Listening…".** The bound toggle
+  shortcut stays registered as an OS-level global hotkey the entire time the
+  settings window is open, so pressing that combo (or anything already
+  intercepted) while recording a new one never reached the capture
+  `keydown` listener — the OS grabbed it first. The settings window now
+  suspends the active global hotkey for the duration of a capture session
+  (`suspend_toggle_shortcut`) and re-arms it on cancel, failure, or unmount
+  (`resume_toggle_shortcut`); a successful capture re-registers the new
+  combo instead, via the existing `update_settings` → `rebind_toggle` path.
+
+### Added
+- **Base theme selector.** Appearance now has a Dark/Light theme picker
+  alongside Accent Color, independent of it. Every settings-window surface
+  reads its ink/canvas colors from CSS variables (`--ink-rgb`,
+  `--canvas-rgb`) flipped by `theme.ts:applyTheme()`, so switching themes
+  repaints the whole window instantly — no reload.
+
 ## [0.1.11] — 2026-07-16
 
 Completes the 0.1.10 settings window: the accent picker now actually
@@ -282,7 +310,8 @@ First cross-platform release — macOS, Linux, and Windows.
 
 ---
 
-[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.11...HEAD
+[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.12...HEAD
+[0.1.12]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.12
 [0.1.11]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.11
 [0.1.10]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.10
 [0.1.9]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.9

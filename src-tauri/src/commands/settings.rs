@@ -59,3 +59,21 @@ pub fn validate_shortcut(shortcut: String) -> ShortcutCheck {
         ShortcutCheck { ok: true, reason: None }
     }
 }
+
+/// Temporarily unregister the current global hotkey so the settings window
+/// can capture arbitrary keystrokes (including the currently-bound combo
+/// itself) while the user records a new one — otherwise the OS-level
+/// shortcut hook intercepts the keydown before it ever reaches the webview
+/// and the capture UI looks permanently stuck on "Listening…".
+#[command]
+pub fn suspend_toggle_shortcut(app: AppHandle, store: tauri::State<'_, Arc<SettingsStore>>) {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    let _ = app.global_shortcut().unregister(store.get().toggle_shortcut.as_str());
+}
+
+/// Re-register the persisted toggle hotkey after a capture session ends
+/// (committed, cancelled, or the settings window closed mid-capture).
+#[command]
+pub fn resume_toggle_shortcut(app: AppHandle, store: tauri::State<'_, Arc<SettingsStore>>) -> Result<(), String> {
+    crate::register_toggle(&app, store.get().toggle_shortcut.as_str())
+}
