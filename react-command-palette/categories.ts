@@ -72,29 +72,29 @@ export interface CategoryStyle {
 
 const STYLES: Record<string, CategoryStyle> = {
   agent: {
-    chip: "bg-gradient-to-br from-violet-500/30 to-fuchsia-500/10 ring-1 ring-inset ring-violet-400/25",
-    bar: "bg-gradient-to-b from-violet-400 to-fuchsia-400",
-    dot: "bg-violet-400",
-  },
-  command: {
-    chip: "bg-gradient-to-br from-sky-500/30 to-blue-500/10 ring-1 ring-inset ring-sky-400/25",
-    bar: "bg-gradient-to-b from-sky-400 to-blue-400",
-    dot: "bg-sky-400",
-  },
-  application: {
-    chip: "bg-gradient-to-br from-amber-400/30 to-orange-500/10 ring-1 ring-inset ring-amber-300/25",
-    bar: "bg-gradient-to-b from-amber-300 to-orange-400",
+    chip: "bg-gradient-to-br from-amber-400/30 to-amber-500/10 ring-1 ring-inset ring-amber-300/30",
+    bar: "bg-gradient-to-b from-amber-300 to-amber-500",
     dot: "bg-amber-300",
   },
+  command: {
+    chip: "bg-gradient-to-br from-cyan-400/30 to-cyan-500/10 ring-1 ring-inset ring-cyan-300/25",
+    bar: "bg-gradient-to-b from-cyan-300 to-cyan-500",
+    dot: "bg-cyan-300",
+  },
+  application: {
+    chip: "bg-gradient-to-br from-blue-400/30 to-indigo-500/10 ring-1 ring-inset ring-blue-300/25",
+    bar: "bg-gradient-to-b from-blue-300 to-indigo-400",
+    dot: "bg-blue-300",
+  },
   extension: {
-    chip: "bg-gradient-to-br from-fuchsia-500/30 to-pink-500/10 ring-1 ring-inset ring-fuchsia-400/25",
-    bar: "bg-gradient-to-b from-fuchsia-400 to-pink-400",
-    dot: "bg-fuchsia-400",
+    chip: "bg-gradient-to-br from-rose-400/30 to-pink-500/10 ring-1 ring-inset ring-rose-300/25",
+    bar: "bg-gradient-to-b from-rose-300 to-pink-400",
+    dot: "bg-rose-300",
   },
   system: {
-    chip: "bg-gradient-to-br from-teal-400/30 to-emerald-500/10 ring-1 ring-inset ring-teal-300/25",
-    bar: "bg-gradient-to-b from-teal-300 to-emerald-400",
-    dot: "bg-teal-300",
+    chip: "bg-gradient-to-br from-emerald-400/30 to-teal-500/10 ring-1 ring-inset ring-emerald-300/25",
+    bar: "bg-gradient-to-b from-emerald-300 to-teal-400",
+    dot: "bg-emerald-300",
   },
   file: {
     chip: "bg-gradient-to-br from-slate-400/25 to-slate-500/10 ring-1 ring-inset ring-slate-300/20",

@@ -19,10 +19,10 @@ export default function Demo() {
   useGlobalHotkey(useCallback(() => setOpen((o) => !o), []));
 
   return (
-    <div className="grid min-h-screen place-items-center bg-gradient-to-br from-[#0b0a17] via-[#160f2e] to-[#1a1220] text-white">
+    <div className="grid min-h-screen place-items-center bg-gradient-to-br from-[#08090a] via-[#0f0b06] to-[#120d08] font-sans text-white">
       <button
         onClick={() => setOpen(true)}
-        className="rounded-xl border border-white/15 bg-white/10 px-5 py-2.5 text-sm font-medium backdrop-blur transition-transform active:scale-95"
+        className="rounded-xl border border-amber-300/20 bg-white/[0.05] px-5 py-2.5 font-mono text-sm font-medium tracking-wide backdrop-blur transition-transform active:scale-95"
       >
         Press ⌘K
       </button>

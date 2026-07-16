@@ -2,6 +2,74 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Self-hosted type. Two faces, one job each:
+ * - Instrument Sans carries titles, subtitles, and body copy — warm,
+ *   humanist, legible at 12–18px.
+ * - Martian Mono carries every "instrument" element: the wordmark, section
+ *   labels, kbd hints, paths/queries — anything that reads as a system
+ *   readout rather than prose.
+ * Bundled as .ttf under /public/fonts so the app never phones out to Google
+ * Fonts at runtime — consistent with the "local first" posture in the
+ * security model (see README §Security Model).
+ */
+@font-face {
+  font-family: "Instrument Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/instrument-sans-400.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Instrument Sans";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/instrument-sans-500.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Instrument Sans";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/instrument-sans-600.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Instrument Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/instrument-sans-700.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Martian Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/martian-mono-400.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Martian Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/martian-mono-500.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Martian Mono";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/martian-mono-600.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Martian Mono";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/martian-mono-700.ttf") format("truetype");
+}
+
 html,
 body,
 #root {
@@ -13,13 +81,13 @@ body,
   width: 8px;
 }
 *::-webkit-scrollbar-thumb {
-  background: rgba(167, 139, 250, 0.25);
+  background: rgba(245, 166, 35, 0.22);
   border-radius: 4px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: rgba(167, 139, 250, 0.4);
+  background: rgba(245, 166, 35, 0.38);
   background-clip: padding-box;
 }
 *::-webkit-scrollbar-track {
@@ -27,33 +95,25 @@ body,
 }
 
 /*
- * Aurora rim: a fixed, static conic-gradient sweep clipped to a 1.5px ring
- * around the panel via `overflow: hidden` + an oversized `::before`. The
- * visible child (the actual glass panel) sits on top at z-index 1, covering
- * everything but that thin border — a calm, unmoving color edge rather than
- * a spinning one. The start angle is chosen so violet lands near the
- * top-left corner and amber near the bottom-right, echoing the ambient wash.
+ * Schematic backdrop grid — a faint 28px ruled grid fading out from the
+ * top-left, standing in for the "task graph" the runtime kernel actually
+ * compiles queries into. Sits behind all content at low opacity; never
+ * competes with foreground text.
  */
-.aurora-frame {
-  position: relative;
-  overflow: hidden;
-  isolation: isolate;
+.hud-grid {
+  background-image:
+    linear-gradient(rgba(245, 166, 35, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(245, 166, 35, 0.05) 1px, transparent 1px);
+  background-size: 28px 28px;
+  -webkit-mask-image: radial-gradient(120% 100% at 15% 0%, black, transparent 72%);
+  mask-image: radial-gradient(120% 100% at 15% 0%, black, transparent 72%);
 }
-.aurora-frame::before {
-  content: "";
-  position: absolute;
-  inset: -60%;
-  background: conic-gradient(
-    from -45deg,
-    rgba(167, 139, 250, 0.92),
-    rgba(99, 102, 241, 0.32) 26%,
-    rgba(245, 166, 35, 0.88) 52%,
-    rgba(236, 72, 153, 0.3) 76%,
-    rgba(167, 139, 250, 0.92) 100%
-  );
-  z-index: 0;
-}
-.aurora-frame > * {
-  position: relative;
-  z-index: 1;
+
+/* Fine film grain over the glass — breaks up flat gradient banding, reads as
+   an instrument surface rather than a smooth UI blur. Static, no animation
+   (motion here would be a distraction, not a detail). */
+.grain-overlay {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  opacity: 0.05;
+  mix-blend-mode: overlay;
 }

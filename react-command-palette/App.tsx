@@ -37,11 +37,25 @@ export default function App() {
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [summonKey, setSummonKey] = useState(0); // bumped on each summon → replays entrance
+  // True while the panel plays its exit animation; the *native* window only
+  // actually hides once that finishes (see `onPanelAnimationComplete`), so
+  // every dismissal path — Escape, selecting a result, the hotkey toggle,
+  // and blur — gets the same smooth collapse instead of an instant snap.
+  const [closing, setClosing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const baseId = useId();
 
-  const hide = useCallback(() => void invoke("hide_window"), []);
+  const hide = useCallback(() => setClosing(true), []);
+
+  /** Fires when the panel's `animate` variant finishes transitioning. Only
+   *  the "exit" variant should ever trigger the real window hide. */
+  const onPanelAnimationComplete = useCallback((definition: unknown) => {
+    if (definition === "exit") {
+      void invoke("hide_window");
+      setClosing(false);
+    }
+  }, []);
 
   // Debounced server-side search (native results + enabled extensions).
   useEffect(() => {
@@ -127,6 +141,25 @@ export default function App() {
     };
   }, []);
 
+  // Rust-initiated dismissals (hotkey toggle while open, blur-hide) can't
+  // call `hide()` directly — they route through this event so the exit
+  // animation still plays before the window actually disappears.
+  useEffect(() => {
+    let un: undefined | (() => void);
+    let cancelled = false;
+    listen("supersearch://request-close", () => hide()).then((fn) => {
+      if (cancelled) {
+        fn();
+      } else {
+        un = fn;
+      }
+    });
+    return () => {
+      cancelled = true;
+      un?.();
+    };
+  }, [hide]);
+
   // Distinct categories present in the current (unfiltered) result set, in
   // display-rank order — feeds the type filter's option list.
   const availableCategories = useMemo(() => {
@@ -209,27 +242,28 @@ export default function App() {
         key={summonKey}
         variants={v.panel}
         initial="hidden"
-        animate="visible"
+        animate={closing ? "exit" : "visible"}
+        onAnimationComplete={onPanelAnimationComplete}
         style={{ willChange: "transform, opacity" }}
         className="relative h-full w-full"
       >
-        {/* Static rim — a fixed conic sweep (no rotation) clipped to a 1.5px ring. */}
-        <div className="aurora-frame relative h-full w-full rounded-[20px] p-[1.5px] shadow-[0_30px_80px_-20px_rgba(0,0,0,0.65),0_0_60px_-28px_rgba(139,92,246,0.45)]">
+        {/* Hairline frame — a static 1px amber-tinted ring around the panel. */}
+        <div className="relative h-full w-full rounded-[16px] shadow-[0_36px_90px_-20px_rgba(0,0,0,0.7),0_0_46px_-26px_rgba(245,166,35,0.4)]">
           <div
             role="dialog"
             aria-label="SuperSearch"
-            className="relative flex h-full w-full flex-col overflow-hidden rounded-[18.5px] border border-white/[0.05]
-                       bg-[hsla(255,22%,9%,0.78)] ring-1 ring-inset ring-white/[0.05] backdrop-blur-2xl"
+            className="relative flex h-full w-full flex-col overflow-hidden rounded-[16px] border border-amber-300/[0.14]
+                       bg-[hsla(32,14%,6%,0.88)] ring-1 ring-inset ring-white/[0.04] backdrop-blur-2xl"
           >
-            {/* Ambient color wash, sitting on the glass beneath all content. */}
+            {/* Schematic grid + grain — reads as an instrument surface, not a flat blur. */}
+            <div className="hud-grid pointer-events-none absolute inset-0" />
+            <div className="grain-overlay pointer-events-none absolute inset-0" />
+            {/* Ambient wash, single-hue, sitting on the glass beneath all content. */}
             <div
               className="pointer-events-none absolute inset-0"
-              style={{
-                background:
-                  "radial-gradient(120% 90% at 0% 0%, rgba(139,92,246,0.14), transparent 55%), " +
-                  "radial-gradient(120% 90% at 100% 100%, rgba(245,166,35,0.09), transparent 55%)",
-              }}
+              style={{ background: "radial-gradient(120% 90% at 0% 0%, rgba(245,166,35,0.12), transparent 55%)" }}
             />
+            <HudCorners />
 
             {/* Search input */}
             <div className="relative z-10 flex h-[58px] items-center gap-3 border-b border-white/[0.06] px-5">
@@ -239,7 +273,7 @@ export default function App() {
                 stroke="currentColor"
                 strokeWidth={2}
                 strokeLinecap="round"
-                className={`h-5 w-5 shrink-0 transition-colors duration-200 ${query ? "text-violet-300" : "text-white/35"}`}
+                className={`h-5 w-5 shrink-0 transition-colors duration-200 ${query ? "text-amber-300" : "text-white/35"}`}
                 aria-hidden
               >
                 <circle cx="8.5" cy="8.5" r="5.5" /><line x1="13" y1="13" x2="18" y2="18" />
@@ -255,10 +289,10 @@ export default function App() {
                 aria-controls={`${baseId}-list`}
                 aria-activedescendant={filteredRows.length ? `${baseId}-opt-${activeIndex}` : undefined}
                 autoComplete="off" autoCorrect="off" spellCheck={false}
-                className="h-full flex-1 bg-transparent text-[18px] font-normal outline-none caret-violet-400 placeholder:text-white/35"
+                className="h-full flex-1 bg-transparent text-[18px] font-normal outline-none caret-amber-400 placeholder:text-white/35"
               />
               {rows.length > 0 && (
-                <span className="shrink-0 rounded-full bg-white/[0.06] px-2.5 py-1 text-[11px] font-medium text-white/40 ring-1 ring-inset ring-white/[0.06]">
+                <span className="shrink-0 rounded-full bg-white/[0.06] px-2.5 py-1 font-mono text-[11px] font-medium text-white/40 ring-1 ring-inset ring-white/[0.06]">
                   {filteredRows.length} {filteredRows.length === 1 ? "result" : "results"}
                 </span>
               )}
@@ -279,9 +313,9 @@ export default function App() {
                 {filteredRows.length === 0 ? (
                   <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-white/40">
                     <span className="relative flex h-10 w-10 items-center justify-center">
-                      <span className="absolute inset-0 animate-pulse rounded-full bg-gradient-to-br from-violet-500/25 to-amber-400/15 blur-md" />
-                      <span className="relative h-2.5 w-2.5 rounded-full bg-gradient-to-br from-violet-300 to-amber-200" />
-                      <span className="absolute h-6 w-6 rounded-full border border-white/15" />
+                      <span className="absolute inset-0 animate-pulse rounded-full bg-amber-400/10 blur-md" />
+                      <span className="absolute h-7 w-7 rounded-full border border-amber-300/20" />
+                      <span className="relative h-1.5 w-1.5 rounded-full bg-amber-300 shadow-[0_0_8px_1px_rgba(245,166,35,0.55)]" />
                     </span>
                     <span className="text-[13px]">
                       {query
@@ -302,7 +336,7 @@ export default function App() {
                     >
                       {groups.map((g) => (
                         <li key={g.label} role="presentation">
-                          <div className="flex items-center gap-1.5 px-2.5 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide text-white/40">
+                          <div className="flex items-center gap-1.5 px-2.5 pb-1 pt-3 font-mono text-[10.5px] font-semibold uppercase tracking-[0.1em] text-white/40">
                             <span className={`h-1 w-1 rounded-full ${categoryStyle(g.items[0]?.row.group).dot}`} />
                             {g.label}
                           </div>
@@ -352,7 +386,7 @@ export default function App() {
                   </span>
                 </span>
               ) : (
-                <span className="mr-auto flex items-center gap-2 font-medium text-white/55">
+                <span className="mr-auto flex items-center gap-2 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-white/55">
                   <BrandMark />
                   SuperSearch
                 </span>
@@ -371,7 +405,7 @@ export default function App() {
 function FooterHint({ k, label }: { k: string; label: string }) {
   return (
     <span className="flex items-center gap-1.5">
-      <kbd className="rounded-[5px] border border-violet-300/15 bg-violet-400/[0.08] px-1.5 py-0.5 text-[11px] text-white/70">{k}</kbd>
+      <kbd className="rounded-[5px] border border-amber-300/20 bg-amber-400/[0.08] px-1.5 py-0.5 font-mono text-[11px] text-white/70">{k}</kbd>
       <span className="text-white/40">{label}</span>
     </span>
   );
@@ -379,10 +413,24 @@ function FooterHint({ k, label }: { k: string; label: string }) {
 
 function BrandMark() {
   return (
-    <span className="relative flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] bg-gradient-to-br from-violet-500 to-indigo-600 shadow-[0_0_10px_-2px_rgba(139,92,246,0.8)]">
-      <span className="h-2 w-2 rounded-full border border-white/70" />
-      <span className="absolute h-[3px] w-[3px] rounded-full bg-white" />
+    <span className="relative flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-amber-300/40 bg-amber-400/[0.07]">
+      <span className="h-[3px] w-[3px] rounded-full bg-amber-300 shadow-[0_0_6px_1px_rgba(245,166,35,0.7)]" />
     </span>
+  );
+}
+
+/** Four viewfinder-style corner ticks inset from the panel's edges — the
+ *  frame's signature detail, echoing the "instrument" identity instead of
+ *  a soft glow. Purely decorative: absolutely positioned, no pointer events. */
+function HudCorners() {
+  const base = "pointer-events-none absolute z-10 h-2.5 w-2.5 border-amber-300/25";
+  return (
+    <>
+      <span className={`${base} left-2.5 top-2.5 border-l border-t`} />
+      <span className={`${base} right-2.5 top-2.5 border-r border-t`} />
+      <span className={`${base} left-2.5 bottom-2.5 border-l border-b`} />
+      <span className={`${base} right-2.5 bottom-2.5 border-r border-b`} />
+    </>
   );
 }
 
@@ -427,8 +475,8 @@ function TypeFilter({
 
       {open && (
         <div
-          className="absolute right-0 top-[calc(100%+6px)] z-20 min-w-[152px] overflow-hidden rounded-xl border border-white/[0.08]
-                     bg-[hsla(255,20%,11%,0.96)] py-1 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.6)] backdrop-blur-xl"
+          className="absolute right-0 top-[calc(100%+6px)] z-20 min-w-[152px] overflow-hidden rounded-xl border border-amber-300/[0.12]
+                     bg-[hsla(32,14%,7%,0.97)] py-1 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.6)] backdrop-blur-xl"
         >
           <FilterOption
             label="All"

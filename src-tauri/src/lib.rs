@@ -188,7 +188,10 @@ fn show_palette(window: &tauri::WebviewWindow) {
 fn toggle_palette(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         if window.is_visible().unwrap_or(false) {
-            let _ = window.hide();
+            // Tell the UI to animate closed first; it calls `hide_window` (the
+            // actual `window.hide()`) once the exit transition finishes, so the
+            // hotkey-toggle-while-open path is as smooth as Escape/selection.
+            let _ = window.emit("supersearch://request-close", ());
         } else {
             show_palette(&window);
         }
@@ -294,7 +297,9 @@ pub fn run() {
                         .map(|s| s.get().hide_on_blur)
                         .unwrap_or(false);
                     if hide_on_blur {
-                        let _ = window.hide();
+                        // Same animated-close handoff as the hotkey toggle —
+                        // losing focus shouldn't snap the window away instantly.
+                        let _ = window.emit("supersearch://request-close", ());
                     }
                 }
             }

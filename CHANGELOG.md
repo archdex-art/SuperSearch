@@ -5,6 +5,32 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versions
 correspond to [GitHub Releases](https://github.com/archdex-art/SuperSearch/releases)
 and their published installers.
 
+## [0.1.7] — 2026-07-16
+
+Visual identity overhaul, and a genuinely animated summon/dismiss instead of
+an instant snap.
+
+### Changed
+- **New "Instrument" identity, replacing the violet/amber aurora glass.**
+  Self-hosted Instrument Sans (titles/body) + Martian Mono (wordmark,
+  section labels, kbd hints, paths) via `public/fonts/` — no runtime fetch
+  from Google Fonts, consistent with the "local first" security posture.
+  The rotating conic-gradient rim is gone; the panel is now a flat amber
+  hairline frame with four viewfinder-style corner brackets, a faint
+  schematic grid, and film-grain texture instead of a soft color wash.
+- **Category colors remapped** to a restrained functional palette (Agent =
+  amber, Command = cyan, Application = blue, Extension = rose, System =
+  emerald, File = slate) in `categories.ts`, shared by the result list, the
+  detail pane, and the type filter.
+- **Smooth, Spotlight-style summon/dismiss.** Every dismissal path — Escape,
+  selecting a result, the hotkey toggle while open, and blur-hide — now
+  plays the panel's exit animation (~130ms fade + scale-down) *before* the
+  native window actually hides, instead of vanishing instantly. Rust no
+  longer calls `window.hide()` directly except from the `hide_window` IPC
+  command itself, which the frontend invokes only after its exit transition
+  completes (`App.tsx`'s `onAnimationComplete` + a new
+  `supersearch://request-close` event for the two Rust-initiated paths).
+
 ## [0.1.6] — 2026-07-15
 
 Follow-up polish on the 0.1.5 redesign.
@@ -170,7 +196,8 @@ First cross-platform release — macOS, Linux, and Windows.
 
 ---
 
-[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.7
 [0.1.6]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.6
 [0.1.5]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.5
 [0.1.4]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.4

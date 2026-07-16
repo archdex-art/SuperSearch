@@ -13,9 +13,9 @@ export function DetailPane({ action }: { action?: CommandAction }) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-white/35">
         <span className="relative flex h-10 w-10 items-center justify-center">
-          <span className="absolute inset-0 animate-pulse rounded-full bg-gradient-to-br from-violet-500/25 to-amber-400/15 blur-md" />
-          <span className="relative h-2.5 w-2.5 rounded-full bg-gradient-to-br from-violet-300 to-amber-200" />
-          <span className="absolute h-6 w-6 rounded-full border border-white/15" />
+          <span className="absolute inset-0 animate-pulse rounded-full bg-amber-400/10 blur-md" />
+          <span className="absolute h-7 w-7 rounded-full border border-amber-300/20" />
+          <span className="relative h-1.5 w-1.5 rounded-full bg-amber-300 shadow-[0_0_8px_1px_rgba(245,166,35,0.55)]" />
         </span>
         <span className="text-[13px]">Select a result to see details</span>
       </div>
@@ -56,7 +56,7 @@ export function DetailPane({ action }: { action?: CommandAction }) {
       <div className="border-t border-white/[0.06]" />
 
       <div className="flex flex-col gap-3 pt-4">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-white/35">Information</span>
+        <span className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-amber-200/40">Information</span>
         <DetailRow label="Category" value={category} dot={style.dot} />
         <DetailRow label="Action" value={verb} />
         {action.subtitle && (
@@ -80,7 +80,7 @@ function DetailRow({
 }) {
   return (
     <div className="flex items-center justify-between gap-4 border-b border-white/[0.05] pb-3 text-[12.5px] last:border-0 last:pb-0">
-      <span className="shrink-0 text-white/40">{label}</span>
+      <span className="shrink-0 font-mono text-[11px] uppercase tracking-wide text-white/35">{label}</span>
       <span
         className={`flex min-w-0 items-center gap-1.5 text-right text-white/75 ${mono ? "font-mono text-[11.5px]" : ""}`}
       >
