@@ -92,7 +92,7 @@ export function ExtensionsPane() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-rose-400/25 bg-rose-500/[0.08] px-3.5 py-2.5 text-[12.5px] text-rose-200/90">
+        <div role="alert" aria-live="assertive" className="rounded-lg border border-rose-400/25 bg-rose-500/[0.08] px-3.5 py-2.5 text-[12.5px] text-rose-200/90">
           {error}
         </div>
       )}

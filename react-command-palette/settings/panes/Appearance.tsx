@@ -1,19 +1,18 @@
 import { useState } from "react";
 import { HexColorPicker } from "react-colorful";
+import { DEFAULT_ACCENT_HEX } from "../../theme";
 import type { Settings } from "../types";
 import { Card, SectionHeading } from "../ui";
 
 /** Built-in accent presets. "amber" is the palette's default identity —
  *  listed first and treated as "no override" (omits `accent_color`). */
 const PRESETS: { id: string; label: string; hex: string }[] = [
-  { id: "amber", label: "Amber", hex: "#f5a623" },
+  { id: "amber", label: "Amber", hex: DEFAULT_ACCENT_HEX },
   { id: "cyan", label: "Cyan", hex: "#22d3ee" },
   { id: "rose", label: "Rose", hex: "#fb7185" },
   { id: "emerald", label: "Emerald", hex: "#34d399" },
   { id: "violet", label: "Violet", hex: "#a78bfa" },
 ];
-
-const DEFAULT_ACCENT = "#f5a623";
 
 export function AppearancePane({
   settings,
@@ -22,7 +21,7 @@ export function AppearancePane({
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
 }) {
-  const current = settings.accent_color ?? DEFAULT_ACCENT;
+  const current = settings.accent_color ?? DEFAULT_ACCENT_HEX;
   const [customOpen, setCustomOpen] = useState(false);
 
   return (

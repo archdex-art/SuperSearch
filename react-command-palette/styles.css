@@ -88,13 +88,13 @@ body,
   width: 8px;
 }
 *::-webkit-scrollbar-thumb {
-  background: rgba(245, 166, 35, 0.22);
+  background: rgb(var(--accent-rgb) / 0.22);
   border-radius: 4px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: rgba(245, 166, 35, 0.38);
+  background: rgb(var(--accent-rgb) / 0.38);
   background-clip: padding-box;
 }
 *::-webkit-scrollbar-track {
@@ -109,8 +109,8 @@ body,
  */
 .hud-grid {
   background-image:
-    linear-gradient(rgba(245, 166, 35, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(245, 166, 35, 0.05) 1px, transparent 1px);
+    linear-gradient(rgb(var(--accent-rgb) / 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--accent-rgb) / 0.05) 1px, transparent 1px);
   background-size: 28px 28px;
   -webkit-mask-image: radial-gradient(120% 100% at 15% 0%, black, transparent 72%);
   mask-image: radial-gradient(120% 100% at 15% 0%, black, transparent 72%);

@@ -5,6 +5,33 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versions
 correspond to [GitHub Releases](https://github.com/archdex-art/SuperSearch/releases)
 and their published installers.
 
+## [0.1.11] — 2026-07-16
+
+Completes the 0.1.10 settings window: the accent picker now actually
+repaints everything, and the settings UI is more accessible.
+
+### Fixed
+- **Accent color didn't fully propagate.** Several surfaces still used the
+  hardcoded amber `rgba(245,166,35,…)` directly — the empty-state glow, the
+  panel's ambient wash and drop shadow, the scrollbar thumb, and the
+  schematic background grid — instead of the `--accent-rgb` CSS variable, so
+  they stayed amber regardless of the chosen accent. All now read the
+  variable via `rgb(var(--accent-rgb) / α)`.
+- **Settings window's own chrome didn't re-theme live.** Picking a color
+  updated the preview card (driven by React state) but not the sidebar's
+  active-nav highlight, wordmark, or "Saving…" dot (driven by the CSS
+  variable), because `applyAccent` only ran on the `settings-changed`
+  broadcast round-trip. It's now also called synchronously in the same
+  window on every local accent change.
+- Extended the sweep to `settings/` (ui.tsx, SettingsApp.tsx, and the
+  General/About panes), which had their own separate hardcoded amber
+  classes outside the palette's `amber-*` → `accent` rename.
+
+### Added
+- `aria-current` on the settings sidebar's active section, `aria-live`
+  regions for the hotkey-validation message and the "Saving…/Saved"
+  status, and `role="alert"` on the extensions error banner.
+
 ## [0.1.10] — 2026-07-16
 
 Adds a proper Settings window instead of relying on defaults baked into
@@ -255,7 +282,8 @@ First cross-platform release — macOS, Linux, and Windows.
 
 ---
 
-[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.10...HEAD
+[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.11...HEAD
+[0.1.11]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.11
 [0.1.10]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.10
 [0.1.9]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.9
 [0.1.8]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.8

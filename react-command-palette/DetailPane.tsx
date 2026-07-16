@@ -15,7 +15,7 @@ export function DetailPane({ action }: { action?: CommandAction }) {
         <span className="relative flex h-10 w-10 items-center justify-center">
           <span className="absolute inset-0 animate-pulse rounded-full bg-accent/10 blur-md" />
           <span className="absolute h-7 w-7 rounded-full border border-accent/20" />
-          <span className="relative h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_8px_1px_rgba(245,166,35,0.55)]" />
+          <span className="relative h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_8px_1px_rgb(var(--accent-rgb)/0.55)]" />
         </span>
         <span className="text-[13px]">Select a result to see details</span>
       </div>

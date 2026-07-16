@@ -88,20 +88,22 @@ export function GeneralPane({
               onClick={startCapture}
               className={`min-w-[140px] rounded-lg border px-3 py-1.5 text-center font-mono text-[12.5px] transition-colors ${
                 capturing
-                  ? "border-amber-300/50 bg-amber-400/[0.12] text-amber-100"
+                  ? "border-accent/50 bg-accent/[0.12] text-accent"
                   : "border-white/[0.1] bg-white/[0.05] text-white/80 hover:bg-white/[0.08]"
               }`}
             >
               {capturing ? "Listening…" : settings.toggle_shortcut}
             </button>
           </Row>
-          {checking && <div className="pb-3 text-[12px] text-white/40">Checking…</div>}
-          {check && !check.ok && (
-            <div className="flex items-start gap-2 pb-3 text-[12px] leading-snug text-rose-300/90">
-              <span className="mt-[3px] h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400" />
-              {check.reason ?? "That combination can't be used."}
-            </div>
-          )}
+          <div aria-live="polite">
+            {checking && <div className="pb-3 text-[12px] text-white/40">Checking…</div>}
+            {check && !check.ok && (
+              <div className="flex items-start gap-2 pb-3 text-[12px] leading-snug text-rose-300/90">
+                <span className="mt-[3px] h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400" />
+                {check.reason ?? "That combination can't be used."}
+              </div>
+            )}
+          </div>
         </Card>
       </div>
 

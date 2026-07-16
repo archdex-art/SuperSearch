@@ -199,7 +199,7 @@ export function CommandPalette({
             style={{ willChange: "transform, opacity" }}
             className="relative w-full max-w-[640px]"
           >
-            <div className="relative rounded-[16px] shadow-[0_36px_90px_-20px_rgba(0,0,0,0.7),0_0_46px_-26px_rgba(245,166,35,0.4)]">
+            <div className="relative rounded-[16px] shadow-[0_36px_90px_-20px_rgba(0,0,0,0.7),0_0_46px_-26px_rgb(var(--accent-rgb)/0.4)]">
               <div
                 role="dialog"
                 aria-modal="true"
@@ -212,7 +212,7 @@ export function CommandPalette({
                 <div className="grain-overlay pointer-events-none absolute inset-0" />
                 <div
                   className="pointer-events-none absolute inset-0"
-                  style={{ background: "radial-gradient(120% 90% at 0% 0%, rgba(245,166,35,0.12), transparent 55%)" }}
+                  style={{ background: "radial-gradient(120% 90% at 0% 0%, rgb(var(--accent-rgb) / 0.12), transparent 55%)" }}
                 />
                 <HudCorners />
 
@@ -257,7 +257,7 @@ export function CommandPalette({
                             <span className="relative flex h-10 w-10 items-center justify-center">
                               <span className="absolute inset-0 animate-pulse rounded-full bg-accent/10 blur-md" />
                               <span className="absolute h-7 w-7 rounded-full border border-accent/20" />
-                              <span className="relative h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_8px_1px_rgba(245,166,35,0.55)]" />
+                              <span className="relative h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_8px_1px_rgb(var(--accent-rgb)/0.55)]" />
                             </span>
                             <span className="text-[13px]">No results</span>
                           </>
@@ -326,7 +326,7 @@ function Hint({ k, label }: { k: string; label: string }) {
 function BrandMark() {
   return (
     <span className="relative flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-accent/40 bg-accent/[0.07]">
-      <span className="h-[3px] w-[3px] rounded-full bg-accent shadow-[0_0_6px_1px_rgba(245,166,35,0.7)]" />
+      <span className="h-[3px] w-[3px] rounded-full bg-accent shadow-[0_0_6px_1px_rgb(var(--accent-rgb)/0.7)]" />
     </span>
   );
 }

@@ -34,8 +34,8 @@ export function AboutPane() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col items-center gap-3 py-6 text-center">
-        <span className="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-300/40 bg-amber-400/[0.07]">
-          <span className="h-2.5 w-2.5 rounded-full bg-amber-300 shadow-[0_0_10px_1px_rgba(245,166,35,0.6)]" />
+        <span className="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-accent/40 bg-accent/[0.07]">
+          <span className="h-2.5 w-2.5 rounded-full bg-accent shadow-[0_0_10px_1px_rgb(var(--accent-rgb)/0.6)]" />
         </span>
         <div className="flex flex-col gap-0.5">
           <span className="text-[16px] font-semibold text-white/95">SuperSearch</span>
@@ -69,7 +69,7 @@ export function AboutPane() {
                 href={link.url}
                 target="_blank"
                 rel="noreferrer"
-                className="text-[12.5px] text-amber-300/80 hover:text-amber-200"
+                className="text-[12.5px] text-accent/80 hover:text-accent"
               >
                 Open ↗
               </a>

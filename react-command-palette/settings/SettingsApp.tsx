@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import { listen } from "../bridge";
+import { applyAccent } from "../theme";
 import type { Settings } from "./types";
 import { getSettings, updateSettings } from "./ipc";
 import { GeneralPane } from "./panes/General";
@@ -22,13 +24,30 @@ export function SettingsApp() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    void getSettings().then(setSettings);
+    void getSettings().then((s) => {
+      setSettings(s);
+      applyAccent(s.accent_color);
+    });
+    let un: undefined | (() => void);
+    let cancelled = false;
+    listen<Settings>("supersearch://settings-changed", (s) => {
+      setSettings(s);
+      applyAccent(s.accent_color);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else un = fn;
+    });
+    return () => {
+      cancelled = true;
+      un?.();
+    };
   }, []);
 
   const patchSettings = useCallback((patch: Partial<Settings>) => {
     setSettings((prev) => {
       if (!prev) return prev;
       const next = { ...prev, ...patch };
+      if ("accent_color" in patch) applyAccent(next.accent_color);
       setSaving(true);
       void updateSettings(next).finally(() => setSaving(false));
       return next;
@@ -38,10 +57,10 @@ export function SettingsApp() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[hsl(32,14%,7%)] text-white">
       {/* Sidebar */}
-      <nav className="flex w-[196px] shrink-0 flex-col gap-0.5 border-r border-white/[0.06] bg-black/[0.15] px-3 py-4">
+      <nav aria-label="Settings sections" className="flex w-[196px] shrink-0 flex-col gap-0.5 border-r border-white/[0.06] bg-black/[0.15] px-3 py-4">
         <div className="mb-3 flex items-center gap-2 px-2">
-          <span className="relative flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] border border-amber-300/40 bg-amber-400/[0.07]">
-            <span className="h-[5px] w-[5px] rounded-full bg-amber-300" />
+          <span className="relative flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] border border-accent/40 bg-accent/[0.07]">
+            <span className="h-[5px] w-[5px] rounded-full bg-accent" />
           </span>
           <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-white/70">
             Settings
@@ -53,6 +72,7 @@ export function SettingsApp() {
             key={s.id}
             type="button"
             onClick={() => setSection(s.id)}
+            aria-current={section === s.id ? "page" : undefined}
             className={`relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium transition-colors ${
               section === s.id ? "text-white/95" : "text-white/50 hover:bg-white/[0.04] hover:text-white/80"
             }`}
@@ -61,7 +81,7 @@ export function SettingsApp() {
               <motion.span
                 layoutId="settings-nav-active"
                 transition={{ type: "spring", stiffness: 500, damping: 40 }}
-                className="absolute inset-0 rounded-lg bg-amber-400/[0.1] ring-1 ring-inset ring-amber-300/[0.16]"
+                className="absolute inset-0 rounded-lg bg-accent/[0.1] ring-1 ring-inset ring-accent/[0.16]"
               />
             )}
             <svg viewBox="0 0 20 20" className="relative z-10 h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
@@ -71,14 +91,14 @@ export function SettingsApp() {
           </button>
         ))}
 
-        <div className="mt-auto flex items-center gap-1.5 px-2 pt-3 text-[11px] text-white/25">
-          <span className={`h-1.5 w-1.5 rounded-full transition-colors ${saving ? "bg-amber-300" : "bg-white/15"}`} />
+        <div aria-live="polite" className="mt-auto flex items-center gap-1.5 px-2 pt-3 text-[11px] text-white/25">
+          <span className={`h-1.5 w-1.5 rounded-full transition-colors ${saving ? "bg-accent" : "bg-white/15"}`} />
           {saving ? "Saving…" : "Saved"}
         </div>
       </nav>
 
       {/* Content */}
-      <main className="flex-1 overflow-y-auto px-8 py-7">
+      <main aria-label="Settings content" className="flex-1 overflow-y-auto px-8 py-7">
         <div className="mx-auto max-w-[540px]">
           <h1 className="mb-5 text-[18px] font-semibold text-white/95">
             {SECTIONS.find((s) => s.id === section)?.label}

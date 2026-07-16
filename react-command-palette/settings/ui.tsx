@@ -30,7 +30,7 @@ export function Toggle({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={`relative h-[22px] w-[38px] shrink-0 rounded-full transition-colors duration-150 ${
-        checked ? "bg-amber-400/80" : "bg-white/[0.12]"
+        checked ? "bg-accent/80" : "bg-white/[0.12]"
       }`}
     >
       <span
@@ -69,7 +69,7 @@ export function Button({
   type?: "button" | "submit";
 }) {
   const styles: Record<typeof variant, string> = {
-    primary: "border-amber-300/40 bg-amber-400/[0.14] text-amber-100 hover:bg-amber-400/[0.2]",
+    primary: "border-accent/40 bg-accent/[0.14] text-accent hover:bg-accent/[0.2]",
     secondary: "border-white/[0.1] bg-white/[0.05] text-white/75 hover:bg-white/[0.08] hover:text-white/95",
     danger: "border-rose-400/30 bg-rose-500/[0.1] text-rose-200 hover:bg-rose-500/[0.16]",
   };
@@ -87,7 +87,7 @@ export function Button({
 
 export function SectionHeading({ children }: { children: ReactNode }) {
   return (
-    <h2 className="mb-1 font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-200/45">
+    <h2 className="mb-1 font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-accent/45">
       {children}
     </h2>
   );
@@ -108,7 +108,7 @@ export function Row({ children }: { children: ReactNode }) {
 export function Pill({ tone = "neutral", children }: { tone?: "neutral" | "amber" | "rose"; children: ReactNode }) {
   const styles: Record<typeof tone, string> = {
     neutral: "bg-white/[0.07] text-white/50 ring-white/[0.08]",
-    amber: "bg-amber-400/10 text-amber-200/90 ring-amber-300/25",
+    amber: "bg-accent/10 text-accent/90 ring-accent/25",
     rose: "bg-rose-500/10 text-rose-200/90 ring-rose-300/25",
   };
   return (
