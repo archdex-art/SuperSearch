@@ -25,6 +25,18 @@ export interface BackendResult {
   action?: unknown | null;
 }
 
+/** Result of `execute_action` (mirrors src-tauri ExecuteActionResponse). */
+export interface ExecuteActionResponse {
+  action_id: string;
+  acknowledged: boolean;
+  /** Whether the underlying OS call actually succeeded. */
+  success: boolean;
+  title: string;
+  category: string;
+  detail: string;
+  backend: string;
+}
+
 /** Extension query hit (mirrors ExtensionQueryHit). */
 export interface ExtensionHit {
   extension_id: string;
@@ -68,6 +80,7 @@ function mock(cmd: string, args?: Record<string, unknown>): unknown {
     case "agent_check":
       return /^open |^launch |^search /.test(q);
     case "execute_action":
+      return { action_id: String(args?.request ? (args.request as { action_id: string }).action_id : ""), acknowledged: true, success: true, title: "Mock", category: "Mock", detail: "✓ Mock completed", backend: "mock" };
     case "execute_extension_action":
     case "hide_window":
       return null;

@@ -120,9 +120,9 @@ const ALIASES: Record<string, keyof typeof STYLES> = {
 };
 
 const DEFAULT_STYLE: CategoryStyle = {
-  chip: "bg-white/10 ring-1 ring-inset ring-white/10",
-  bar: "bg-gradient-to-b from-white/60 to-white/30",
-  dot: "bg-white/50",
+  chip: "bg-ink/10 ring-1 ring-inset ring-ink/10",
+  bar: "bg-gradient-to-b from-ink/60 to-ink/30",
+  dot: "bg-ink/50",
 };
 
 export function categoryStyle(group?: string): CategoryStyle {

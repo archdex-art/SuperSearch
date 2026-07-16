@@ -5,6 +5,42 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versions
 correspond to [GitHub Releases](https://github.com/archdex-art/SuperSearch/releases)
 and their published installers.
 
+## [0.1.13] — 2026-07-17
+
+Extends the base theme to the main palette window (it only ever reached the
+Settings window before), surfaces failed open/launch actions instead of
+silently closing, and removes a rendering artifact around the palette.
+
+### Fixed
+- **Theme choice didn't apply to the palette.** Each Tauri window is its own
+  webview with an independent `document`; picking Light in Settings only
+  ever set `data-theme` on the Settings window's own document; the main
+  palette never called `applyTheme()` at all, so it always rendered the dark
+  default no matter what was chosen — looking like the setting kept
+  resetting on every summon. The palette now applies the persisted theme on
+  boot and live on every `settings-changed` broadcast, the same way it
+  already did for accent color. Converted the palette's own hardcoded
+  `white/*` and `hsla(32,14%,6%,…)` tokens (`App.tsx`, `CommandItem.tsx`,
+  `DetailPane.tsx`, `categories.ts`) to the `ink`/`canvas` semantic colors
+  introduced in 0.1.12 so Light actually repaints it, not just Settings.
+- **Failed file/app opens closed the palette with zero feedback.**
+  `execute_action` always reported `acknowledged: true` even when the
+  underlying `open`/`xdg-open` call failed (bad or stale path, no default
+  handler, a permission gate, …), and the frontend never inspected the
+  response before closing — a failed open and a successful one looked
+  identical to the user. Added an explicit `success` field to
+  `ExecuteActionResponse`; the palette now only closes on success and
+  otherwise keeps the panel open with an inline error banner naming the
+  actual OS-level failure.
+- **Translucent rectangle around the palette.** The panel's ambient
+  box-shadow (`blur-90px`/`spread--20px`) reached far past the 12px padding
+  around it, but the window itself is transparent with no native shadow —
+  so the shadow's soft gradient got hard-clipped at the window's true
+  rectangular bounds instead of fading out, showing as a faint rectangular
+  edge floating around the rounded card. Shrunk the shadow to fit inside
+  the existing padding so it now fades to nothing before it ever reaches
+  the window edge.
+
 ## [0.1.12] — 2026-07-17
 
 Fixes two settings-window bugs found during a UI pass, and adds a real
@@ -310,7 +346,8 @@ First cross-platform release — macOS, Linux, and Windows.
 
 ---
 
-[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.12...HEAD
+[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.13...HEAD
+[0.1.13]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.13
 [0.1.12]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.12
 [0.1.11]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.11
 [0.1.10]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.10

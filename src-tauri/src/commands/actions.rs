@@ -36,6 +36,14 @@ pub struct ExecuteActionRequest {
 pub struct ExecuteActionResponse {
     pub action_id: String,
     pub acknowledged: bool,
+    /// Whether the underlying OS call actually succeeded — distinct from
+    /// `acknowledged` (which just means "we got a response object back").
+    /// The frontend uses this, not `detail`'s ✓/✗ prefix, to decide whether
+    /// to close the palette or surface an error; previously nothing read
+    /// this outcome at all, so a failed `open`/`xdg-open` (bad path, no
+    /// default handler, a sandboxed/offline volume, …) silently closed the
+    /// palette with no feedback — indistinguishable from it doing nothing.
+    pub success: bool,
     pub title: String,
     pub category: String,
     pub detail: String,
@@ -115,6 +123,7 @@ fn run_action(
         ExecuteActionResponse {
             action_id: action_id.to_string(),
             acknowledged: true,
+            success: true,
             title: agent_response.intent.clone(),
             category: "Agent".into(),
             detail: agent_response.summary.clone(),
@@ -152,6 +161,7 @@ fn pal_response(
     ExecuteActionResponse {
         action_id: action_id.to_string(),
         acknowledged: true,
+        success: result.success,
         title: title.to_string(),
         category: category.to_string(),
         detail: if result.success {
@@ -198,6 +208,7 @@ fn finalize(
             Ok(ExecuteActionResponse {
                 action_id: action_id.to_string(),
                 acknowledged: true,
+                success,
                 title: title.to_string(),
                 category: category.to_string(),
                 detail: if success {
@@ -227,6 +238,7 @@ fn execute_sys_command(action_id: &str) -> Result<ExecuteActionResponse, String>
             Ok(ExecuteActionResponse {
                 action_id: action_id.to_string(),
                 acknowledged: true,
+                success: r.success,
                 title: "Clipboard Contents".into(),
                 category: "System".into(),
                 detail,
@@ -243,6 +255,7 @@ fn execute_sys_command(action_id: &str) -> Result<ExecuteActionResponse, String>
             Ok(ExecuteActionResponse {
                 action_id: action_id.to_string(),
                 acknowledged: true,
+                success: r.success,
                 title: "Running Applications".into(),
                 category: "System".into(),
                 detail,
@@ -452,6 +465,7 @@ fn sys_system_info(action_id: &str) -> Result<ExecuteActionResponse, String> {
         return Ok(ExecuteActionResponse {
             action_id: action_id.to_string(),
             acknowledged: true,
+            success: true,
             title: "System Information".into(),
             category: "System".into(),
             detail: output,
@@ -467,6 +481,7 @@ fn sys_system_info(action_id: &str) -> Result<ExecuteActionResponse, String> {
         return Ok(ExecuteActionResponse {
             action_id: action_id.to_string(),
             acknowledged: true,
+            success: true,
             title: "System Information".into(),
             category: "System".into(),
             detail: output,

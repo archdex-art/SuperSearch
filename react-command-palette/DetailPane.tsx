@@ -11,7 +11,7 @@ import { actionVerb, categoryStyle, detailValueLabel, sectionLabel } from "./cat
 export function DetailPane({ action }: { action?: CommandAction }) {
   if (!action) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-white/35">
+      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-ink/35">
         <span className="relative flex h-10 w-10 items-center justify-center">
           <span className="absolute inset-0 animate-pulse rounded-full bg-accent/10 blur-md" />
           <span className="absolute h-7 w-7 rounded-full border border-accent/20" />
@@ -46,14 +46,14 @@ export function DetailPane({ action }: { action?: CommandAction }) {
           )}
         </span>
         <div className="flex flex-col gap-1">
-          <span className="text-[16px] font-semibold leading-tight text-white/95">{action.title}</span>
+          <span className="text-[16px] font-semibold leading-tight text-ink/95">{action.title}</span>
           {action.subtitle && (
-            <span className="max-w-[260px] truncate text-[12.5px] text-white/45">{action.subtitle}</span>
+            <span className="max-w-[260px] truncate text-[12.5px] text-ink/45">{action.subtitle}</span>
           )}
         </div>
       </div>
 
-      <div className="border-t border-white/[0.06]" />
+      <div className="border-t border-ink/[0.06]" />
 
       <div className="flex flex-col gap-3 pt-4">
         <span className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-accent/40">Information</span>
@@ -79,10 +79,10 @@ function DetailRow({
   mono?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-white/[0.05] pb-3 text-[12.5px] last:border-0 last:pb-0">
-      <span className="shrink-0 font-mono text-[11px] uppercase tracking-wide text-white/35">{label}</span>
+    <div className="flex items-center justify-between gap-4 border-b border-ink/[0.05] pb-3 text-[12.5px] last:border-0 last:pb-0">
+      <span className="shrink-0 font-mono text-[11px] uppercase tracking-wide text-ink/35">{label}</span>
       <span
-        className={`flex min-w-0 items-center gap-1.5 text-right text-white/75 ${mono ? "font-mono text-[11.5px]" : ""}`}
+        className={`flex min-w-0 items-center gap-1.5 text-right text-ink/75 ${mono ? "font-mono text-[11.5px]" : ""}`}
       >
         {dot && <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} />}
         <span className="truncate">{value}</span>
