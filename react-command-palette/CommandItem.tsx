@@ -57,7 +57,7 @@ function CommandItemBase({
         <motion.div
           layoutId="cmd-highlight"
           transition={highlightTransition}
-          className="absolute inset-0 overflow-hidden rounded-xl bg-gradient-to-r from-accent/[0.08] via-white/[0.05] to-transparent
+          className="absolute inset-0 overflow-hidden rounded-xl bg-gradient-to-r from-accent/[0.08] via-ink/[0.05] to-transparent
                      ring-1 ring-inset ring-accent/[0.14] shadow-[0_1px_0_0_rgba(255,255,255,0.06)_inset]"
         >
           <span className={`absolute inset-y-2 left-0 w-[3px] rounded-full ${style.bar}`} />
@@ -78,12 +78,12 @@ function CommandItemBase({
 
       <span className="relative z-10 flex min-w-0 flex-col">
         <span
-          className={`truncate font-medium leading-tight text-white/95 ${compact ? "text-[13.5px]" : "text-[15px]"}`}
+          className={`truncate font-medium leading-tight text-ink/95 ${compact ? "text-[13.5px]" : "text-[15px]"}`}
         >
           {action.title}
         </span>
         {action.subtitle && !compact && (
-          <span className="truncate text-[12.5px] leading-tight text-white/45">{action.subtitle}</span>
+          <span className="truncate text-[12.5px] leading-tight text-ink/45">{action.subtitle}</span>
         )}
       </span>
 
@@ -93,7 +93,7 @@ function CommandItemBase({
           initial={false}
           animate={{ opacity: active ? 1 : 0, x: active ? 0 : 4 }}
           transition={{ duration: 0.14, ease: "easeOut" }}
-          className="flex items-center gap-2 text-[13px] text-white/55"
+          className="flex items-center gap-2 text-[13px] text-ink/55"
         >
           {action.hint && !compact && <span>{action.hint}</span>}
           <kbd className="rounded-md border border-accent/25 bg-accent/10 px-1.5 py-0.5 font-mono text-[11px] text-accent/90">

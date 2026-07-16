@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { LayoutGroup, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "framer-motion";
 import { CommandItem } from "./CommandItem";
 import { DetailPane } from "./DetailPane";
 import {
@@ -15,8 +15,8 @@ import {
   panelVariants,
   reducedVariants,
 } from "./variants";
-import { invoke, listen, type BackendResult } from "./bridge";
-import { applyAccent } from "./theme";
+import { invoke, listen, type BackendResult, type ExecuteActionResponse } from "./bridge";
+import { applyAccent, applyTheme } from "./theme";
 import type { CommandAction } from "./types";
 
 /** A palette row plus how to run it. */
@@ -43,6 +43,10 @@ export default function App() {
   // every dismissal path — Escape, selecting a result, the hotkey toggle,
   // and blur — gets the same smooth collapse instead of an instant snap.
   const [closing, setClosing] = useState(false);
+  // Set when a selected action's underlying OS call fails (bad/missing path,
+  // no default handler, an extension throwing, …) — surfaced inline instead
+  // of the palette just silently closing as if nothing happened.
+  const [actionError, setActionError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const baseId = useId();
@@ -94,14 +98,28 @@ export default function App() {
           group: r.category,
           hint: actionVerb(r.category),
           perform: async () => {
-            if (r.id.startsWith("ext:") && r.action != null) {
-              // Extension result — dispatch through its capability token.
-              const extId = r.id.slice("ext:".length).split("::")[0];
-              await invoke("execute_extension_action", { id: extId, action: r.action });
-            } else {
-              await invoke("execute_action", { request: { action_id: r.id, with_meta: false } });
+            setActionError(null);
+            try {
+              if (r.id.startsWith("ext:") && r.action != null) {
+                // Extension result — dispatch through its capability token.
+                const extId = r.id.slice("ext:".length).split("::")[0];
+                await invoke("execute_extension_action", { id: extId, action: r.action });
+              } else {
+                const response = await invoke<ExecuteActionResponse>("execute_action", {
+                  request: { action_id: r.id, with_meta: false },
+                });
+                if (!response.success) {
+                  // Surface the real OS-level failure (bad/missing path, no
+                  // default handler, a permission gate, …) instead of
+                  // silently closing as if nothing happened.
+                  setActionError(response.detail.replace(/^✗\s*/, ""));
+                  return;
+                }
+              }
+              hide();
+            } catch (e) {
+              setActionError(String(e instanceof Error ? e.message : e));
             }
-            hide();
           },
         }));
         rows.sort((a, b) => (CATEGORY_RANK[a.group ?? ""] ?? 99) - (CATEGORY_RANK[b.group ?? ""] ?? 99));
@@ -134,6 +152,7 @@ export default function App() {
       setActiveIndex(0);
       setCategoryFilter(null);
       setFilterOpen(false);
+      setActionError(null);
       setSummonKey((k) => k + 1);
       requestAnimationFrame(() => inputRef.current?.focus());
     }).then((fn) => {
@@ -149,15 +168,23 @@ export default function App() {
     };
   }, []);
 
-  // Apply the persisted accent on boot, then keep it live: the settings
-  // window broadcasts `settings-changed` on every save, so a color picked
-  // there repaints the palette immediately — no reopen required.
+  // Apply the persisted accent + base theme on boot, then keep both live:
+  // the settings window broadcasts `settings-changed` on every save, so a
+  // color or theme picked there repaints the palette immediately — no
+  // reopen required. Each Tauri window is its own webview with an
+  // independent `document`, so this listener (not just the one in the
+  // settings window) is what makes the palette itself pick up a theme
+  // change instead of always rendering the dark default.
   useEffect(() => {
-    void invoke<{ accent_color?: string | null }>("get_settings").then((s) => applyAccent(s.accent_color));
+    void invoke<{ accent_color?: string | null; theme?: string }>("get_settings").then((s) => {
+      applyAccent(s.accent_color);
+      applyTheme(s.theme);
+    });
     let un: undefined | (() => void);
     let cancelled = false;
-    listen<{ accent_color?: string | null }>("supersearch://settings-changed", (s) => {
+    listen<{ accent_color?: string | null; theme?: string }>("supersearch://settings-changed", (s) => {
       applyAccent(s.accent_color);
+      applyTheme(s.theme);
     }).then((fn) => {
       if (cancelled) {
         fn();
@@ -303,7 +330,7 @@ export default function App() {
   const activeRow = filteredRows[activeIndex];
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-transparent p-3 text-white" onKeyDown={onKeyDown}>
+    <div className="flex h-screen w-screen overflow-hidden bg-transparent p-3 text-ink" onKeyDown={onKeyDown}>
       <motion.div
         key={summonKey}
         variants={v.panel}
@@ -313,13 +340,21 @@ export default function App() {
         style={{ willChange: "transform, opacity" }}
         className="relative h-full w-full"
       >
-        {/* Hairline frame — a static 1px accent-tinted ring around the panel. */}
-        <div className="relative h-full w-full rounded-[16px] shadow-[0_36px_90px_-20px_rgba(0,0,0,0.7),0_0_46px_-26px_rgb(var(--accent-rgb)/0.4)]">
+        {/* Hairline frame — a static 1px accent-tinted ring around the panel.
+            Shadow spread is deliberately small: the window itself is
+            transparent with no native shadow (see tauri.conf.json), and the
+            outer wrapper only has 12px of padding (`p-3`) around this panel.
+            A shadow that reaches further than that gets hard-clipped at the
+            window's actual rectangular pixel bounds instead of fading out —
+            which reads as a faint translucent rectangle floating around the
+            rounded card. Keeping the blur/spread inside that 12px budget
+            keeps the shadow soft all the way to nothing. */}
+        <div className="relative h-full w-full rounded-[16px] shadow-[0_6px_16px_-12px_rgba(0,0,0,0.6),0_0_10px_-6px_rgb(var(--accent-rgb)/0.35)]">
           <div
             role="dialog"
             aria-label="SuperSearch"
             className="relative flex h-full w-full flex-col overflow-hidden rounded-[16px] border border-accent/[0.14]
-                       bg-[hsla(32,14%,6%,0.88)] ring-1 ring-inset ring-white/[0.04] backdrop-blur-2xl"
+                       bg-canvas/[0.88] ring-1 ring-inset ring-ink/[0.04] backdrop-blur-2xl"
           >
             {/* Schematic grid + grain — reads as an instrument surface, not a flat blur. */}
             <div className="hud-grid pointer-events-none absolute inset-0" />
@@ -332,14 +367,14 @@ export default function App() {
             <HudCorners />
 
             {/* Search input */}
-            <div className="relative z-10 flex h-[58px] items-center gap-3 border-b border-white/[0.06] px-5">
+            <div className="relative z-10 flex h-[58px] items-center gap-3 border-b border-ink/[0.06] px-5">
               <svg
                 viewBox="0 0 20 20"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth={2}
                 strokeLinecap="round"
-                className={`h-5 w-5 shrink-0 transition-colors duration-200 ${query ? "text-accent" : "text-white/35"}`}
+                className={`h-5 w-5 shrink-0 transition-colors duration-200 ${query ? "text-accent" : "text-ink/35"}`}
                 aria-hidden
               >
                 <circle cx="8.5" cy="8.5" r="5.5" /><line x1="13" y1="13" x2="18" y2="18" />
@@ -347,7 +382,7 @@ export default function App() {
               <input
                 ref={inputRef}
                 value={query}
-                onChange={(e) => { setQuery(e.target.value); setActiveIndex(0); }}
+                onChange={(e) => { setQuery(e.target.value); setActiveIndex(0); setActionError(null); }}
                 onFocus={() => setFilterOpen(false)}
                 placeholder="Search apps, files, or ask anything…"
                 role="combobox"
@@ -355,10 +390,10 @@ export default function App() {
                 aria-controls={`${baseId}-list`}
                 aria-activedescendant={filteredRows.length ? `${baseId}-opt-${activeIndex}` : undefined}
                 autoComplete="off" autoCorrect="off" spellCheck={false}
-                className="h-full flex-1 bg-transparent text-[18px] font-normal outline-none caret-accent placeholder:text-white/35"
+                className="h-full flex-1 bg-transparent text-[18px] font-normal outline-none caret-accent placeholder:text-ink/35"
               />
               {rows.length > 0 && (
-                <span className="shrink-0 rounded-full bg-white/[0.06] px-2.5 py-1 font-mono text-[11px] font-medium text-white/40 ring-1 ring-inset ring-white/[0.06]">
+                <span className="shrink-0 rounded-full bg-ink/[0.06] px-2.5 py-1 font-mono text-[11px] font-medium text-ink/40 ring-1 ring-inset ring-ink/[0.06]">
                   {filteredRows.length} {filteredRows.length === 1 ? "result" : "results"}
                 </span>
               )}
@@ -377,7 +412,7 @@ export default function App() {
             <LayoutGroup>
               <div className="relative z-10 flex-1 overflow-hidden">
                 {filteredRows.length === 0 ? (
-                  <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-white/40">
+                  <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-ink/40">
                     <span className="relative flex h-10 w-10 items-center justify-center">
                       <span className="absolute inset-0 animate-pulse rounded-full bg-accent/10 blur-md" />
                       <span className="absolute h-7 w-7 rounded-full border border-accent/20" />
@@ -398,11 +433,11 @@ export default function App() {
                       id={`${baseId}-list`}
                       role="listbox"
                       variants={v.list}
-                      className="w-[44%] min-w-[210px] shrink-0 overflow-y-auto overscroll-contain border-r border-white/[0.06] p-2"
+                      className="w-[44%] min-w-[210px] shrink-0 overflow-y-auto overscroll-contain border-r border-ink/[0.06] p-2"
                     >
                       {groups.map((g) => (
                         <li key={g.label} role="presentation">
-                          <div className="flex items-center gap-1.5 px-2.5 pb-1 pt-3 font-mono text-[10.5px] font-semibold uppercase tracking-[0.1em] text-white/40">
+                          <div className="flex items-center gap-1.5 px-2.5 pb-1 pt-3 font-mono text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink/40">
                             <span className={`h-1 w-1 rounded-full ${categoryStyle(g.items[0]?.row.group).dot}`} />
                             {g.label}
                           </div>
@@ -434,10 +469,35 @@ export default function App() {
               </div>
             </LayoutGroup>
 
+            <AnimatePresence>
+              {actionError && (
+                <motion.div
+                  role="alert"
+                  aria-live="assertive"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 6 }}
+                  transition={{ duration: 0.15 }}
+                  className="relative z-10 mx-4 mb-2.5 flex items-start gap-2 rounded-lg border border-rose-400/25 bg-rose-500/[0.1] px-3 py-2 text-[12px] leading-snug text-rose-200/90"
+                >
+                  <span className="mt-[3px] h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400" />
+                  <span className="min-w-0 flex-1">{actionError}</span>
+                  <button
+                    type="button"
+                    onClick={() => setActionError(null)}
+                    aria-label="Dismiss"
+                    className="shrink-0 text-rose-300/60 hover:text-rose-200"
+                  >
+                    ✕
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Footer */}
-            <div className="relative z-10 flex items-center gap-4 border-t border-white/[0.06] px-4 py-2.5 text-[12px] text-white/45">
+            <div className="relative z-10 flex items-center gap-4 border-t border-ink/[0.06] px-4 py-2.5 text-[12px] text-ink/45">
               {activeRow ? (
-                <span className="mr-auto flex min-w-0 items-center gap-2 font-medium text-white/70">
+                <span className="mr-auto flex min-w-0 items-center gap-2 font-medium text-ink/70">
                   <span
                     className={`flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-[5px] text-[10px] ${categoryStyle(activeRow.group).chip}`}
                   >
@@ -452,7 +512,7 @@ export default function App() {
                   </span>
                 </span>
               ) : (
-                <span className="mr-auto flex items-center gap-2 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-white/55">
+                <span className="mr-auto flex items-center gap-2 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-ink/55">
                   <BrandMark />
                   SuperSearch
                 </span>
@@ -465,7 +525,7 @@ export default function App() {
                 onClick={() => void invoke("open_settings_window")}
                 title="Settings (⌘,)"
                 aria-label="Open Settings"
-                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-white/35 transition-colors hover:bg-white/[0.08] hover:text-white/70"
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-ink/35 transition-colors hover:bg-ink/[0.08] hover:text-ink/70"
               >
                 <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                   <circle cx="8" cy="8" r="2" />
@@ -483,8 +543,8 @@ export default function App() {
 function FooterHint({ k, label }: { k: string; label: string }) {
   return (
     <span className="flex items-center gap-1.5">
-      <kbd className="rounded-[5px] border border-accent/20 bg-accent/[0.08] px-1.5 py-0.5 font-mono text-[11px] text-white/70">{k}</kbd>
-      <span className="text-white/40">{label}</span>
+      <kbd className="rounded-[5px] border border-accent/20 bg-accent/[0.08] px-1.5 py-0.5 font-mono text-[11px] text-ink/70">{k}</kbd>
+      <span className="text-ink/40">{label}</span>
     </span>
   );
 }
@@ -536,14 +596,14 @@ function TypeFilter({
       <button
         type="button"
         onClick={() => onOpenChange(!open)}
-        className="flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.05] px-2.5 py-1.5 text-[12px]
-                   font-medium text-white/60 transition-colors hover:bg-white/[0.08] hover:text-white/85"
+        className="flex items-center gap-1.5 rounded-lg border border-ink/[0.08] bg-ink/[0.05] px-2.5 py-1.5 text-[12px]
+                   font-medium text-ink/60 transition-colors hover:bg-ink/[0.08] hover:text-ink/85"
       >
-        <span className={`h-1.5 w-1.5 rounded-full ${value ? categoryStyle(value).dot : "bg-white/40"}`} />
+        <span className={`h-1.5 w-1.5 rounded-full ${value ? categoryStyle(value).dot : "bg-ink/40"}`} />
         {value ? sectionLabel(value) : "All"}
         <svg
           viewBox="0 0 12 12"
-          className={`h-3 w-3 text-white/35 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
+          className={`h-3 w-3 text-ink/35 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
           fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round"
           aria-hidden
         >
@@ -554,7 +614,7 @@ function TypeFilter({
       {open && (
         <div
           className="absolute right-0 top-[calc(100%+6px)] z-20 min-w-[152px] overflow-hidden rounded-xl border border-accent/[0.12]
-                     bg-[hsla(32,14%,7%,0.97)] py-1 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.6)] backdrop-blur-xl"
+                     bg-canvas/[0.97] py-1 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.6)] backdrop-blur-xl"
         >
           <FilterOption
             label="All"
@@ -592,10 +652,10 @@ function FilterOption({
       type="button"
       onClick={onClick}
       className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12.5px] transition-colors ${
-        active ? "bg-white/[0.08] text-white/95" : "text-white/60 hover:bg-white/[0.05] hover:text-white/85"
+        active ? "bg-ink/[0.08] text-ink/95" : "text-ink/60 hover:bg-ink/[0.05] hover:text-ink/85"
       }`}
     >
-      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot ?? "bg-white/40"}`} />
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot ?? "bg-ink/40"}`} />
       {label}
     </button>
   );
