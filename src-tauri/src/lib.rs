@@ -9,7 +9,7 @@ pub mod commands;
 
 use std::sync::Arc;
 use std::time::Instant;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use tauri::{Emitter, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
@@ -202,8 +202,50 @@ fn toggle_palette(app: &tauri::AppHandle) {
     }
 }
 
+/// True if `shortcut` is one of the combos macOS reserves for itself under
+/// System Settings → Keyboard → Keyboard Shortcuts → Input Sources
+/// ("Select the previous/next input source": Control+Space and
+/// Control+Option+Space by default). Those are handled by a system-level
+/// Symbolic Hotkey that can intercept the keypress *before* it ever reaches
+/// a third-party global-shortcut registration — the OS-level race isn't
+/// something app code can win consistently, so the win rate ends up
+/// depending on focus/input-method state and looks like "the hotkey
+/// sometimes just doesn't fire." Refusing the binding outright beats
+/// accepting one that will flake in the field.
+#[cfg(target_os = "macos")]
+fn is_reserved_macos_shortcut(shortcut: &str) -> bool {
+    let mut mods: Vec<&str> = Vec::new();
+    let mut key = "";
+    for part in shortcut.split('+') {
+        match part.trim().to_ascii_lowercase().as_str() {
+            "control" | "ctrl" => mods.push("control"),
+            "alt" | "option" => mods.push("alt"),
+            "shift" => mods.push("shift"),
+            "super" | "cmd" | "command" | "meta" | "commandorcontrol" | "cmdorctrl" => mods.push("super"),
+            _ => key = part.trim(),
+        }
+    }
+    mods.sort_unstable();
+    mods.dedup();
+    key.eq_ignore_ascii_case("space") && (mods == ["control"] || mods == ["alt", "control"])
+}
+
+#[cfg(not(target_os = "macos"))]
+fn is_reserved_macos_shortcut(_shortcut: &str) -> bool {
+    false
+}
+
 /// Register `shortcut` as the global summon/dismiss hotkey (fires on key-down).
 pub(crate) fn register_toggle(app: &tauri::AppHandle, shortcut: &str) -> Result<(), String> {
+    if is_reserved_macos_shortcut(shortcut) {
+        return Err(format!(
+            "\"{shortcut}\" is reserved by macOS for switching input sources \
+             (System Settings → Keyboard → Keyboard Shortcuts → Input Sources) — \
+             a third-party global shortcut can't reliably win that race and will \
+             trigger inconsistently. Pick a different combo, or free up the \
+             reserved one there."
+        ));
+    }
     app.global_shortcut()
         .on_shortcut(shortcut, |app, _shortcut, event| {
             if event.state == ShortcutState::Pressed {
@@ -337,12 +379,32 @@ pub fn run() {
             // Load persisted settings (hotkey, hide-on-blur, theme).
             let settings_store = Arc::new(SettingsStore::load(data_dir.clone()));
             let settings = settings_store.get();
-            app.manage(settings_store);
+            app.manage(settings_store.clone());
 
-            // Register the global summon/dismiss hotkey from settings.
+            // Register the global summon/dismiss hotkey from settings. A shortcut
+            // macOS itself reserves (e.g. Control+Space for input-source
+            // switching) is refused by `register_toggle` rather than accepted
+            // and left to flake — fall back to the built-in default and persist
+            // the correction so this self-heals without needing a settings UI.
             match register_toggle(&handle, &settings.toggle_shortcut) {
                 Ok(()) => info!(shortcut = %settings.toggle_shortcut, "Global toggle shortcut registered"),
-                Err(e) => error!(error = %e, shortcut = %settings.toggle_shortcut, "Failed to register global shortcut"),
+                Err(e) => {
+                    error!(error = %e, shortcut = %settings.toggle_shortcut, "Failed to register global shortcut");
+                    if settings.toggle_shortcut != settings::DEFAULT_TOGGLE_SHORTCUT {
+                        match register_toggle(&handle, settings::DEFAULT_TOGGLE_SHORTCUT) {
+                            Ok(()) => {
+                                warn!(
+                                    fallback = settings::DEFAULT_TOGGLE_SHORTCUT,
+                                    "Registered the default shortcut instead and persisted the correction"
+                                );
+                                let mut corrected = settings.clone();
+                                corrected.toggle_shortcut = settings::DEFAULT_TOGGLE_SHORTCUT.into();
+                                let _ = settings_store.set(corrected);
+                            }
+                            Err(e2) => error!(error = %e2, "Fallback shortcut registration also failed"),
+                        }
+                    }
+                }
             }
 
             // Make the palette overlay the *active* Space instead of living on
@@ -391,4 +453,27 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("Failed to run SuperSearch");
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod reserved_shortcut_tests {
+    use super::is_reserved_macos_shortcut;
+
+    #[test]
+    fn flags_the_input_source_switching_combos() {
+        assert!(is_reserved_macos_shortcut("Control+Space"));
+        assert!(is_reserved_macos_shortcut("Ctrl+Space"));
+        assert!(is_reserved_macos_shortcut("Control+Option+Space"));
+        assert!(is_reserved_macos_shortcut("Control+Alt+Space"));
+        // Modifier order shouldn't matter.
+        assert!(is_reserved_macos_shortcut("Option+Control+Space"));
+    }
+
+    #[test]
+    fn leaves_unrelated_combos_alone() {
+        assert!(!is_reserved_macos_shortcut("Alt+Space"));
+        assert!(!is_reserved_macos_shortcut("CommandOrControl+Space"));
+        assert!(!is_reserved_macos_shortcut("Control+Shift+Space"));
+        assert!(!is_reserved_macos_shortcut("Control+Return"));
+    }
 }

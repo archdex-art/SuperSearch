@@ -5,6 +5,25 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versions
 correspond to [GitHub Releases](https://github.com/archdex-art/SuperSearch/releases)
 and their published installers.
 
+## [0.1.9] — 2026-07-16
+
+Guards against a second, unfixable-in-app-code source of the "hotkey
+sometimes doesn't fire" report: a `toggle_shortcut` that collides with a
+shortcut macOS itself reserves.
+
+### Fixed
+- **Reject shortcuts macOS reserves for input-source switching.**
+  `Control+Space` and `Control+Option+Space` are macOS's own defaults for
+  "Select the previous/next input source" (System Settings → Keyboard →
+  Keyboard Shortcuts → Input Sources) — a system-level Symbolic Hotkey that
+  can intercept the keypress before a third-party global-shortcut
+  registration ever sees it, so the app's handler fires inconsistently no
+  matter what Carbon reports back. `register_toggle` now refuses these
+  combos outright instead of silently accepting a binding that will flake.
+  If the persisted `toggle_shortcut` is one of them at boot, the app falls
+  back to the built-in default (`Alt+Space`) and persists the correction —
+  self-healing, since there's no settings UI yet to fix it by hand.
+
 ## [0.1.8] — 2026-07-16
 
 Fixes a race between the new exit animation (0.1.7) and the global summon
@@ -213,7 +232,8 @@ First cross-platform release — macOS, Linux, and Windows.
 
 ---
 
-[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.8...HEAD
+[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.9...HEAD
+[0.1.9]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.9
 [0.1.8]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.8
 [0.1.7]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.7
 [0.1.6]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.6

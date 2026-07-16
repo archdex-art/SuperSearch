@@ -9,6 +9,13 @@ use std::path::PathBuf;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 
+/// Built-in default global summon/dismiss hotkey. Exposed so `lib.rs` can
+/// fall back to it — and persist the correction — if the user's configured
+/// shortcut turns out to be one macOS reserves for itself (e.g. Control+Space
+/// for input-source switching), which a third-party registration can only
+/// intermittently win against.
+pub const DEFAULT_TOGGLE_SHORTCUT: &str = "Alt+Space";
+
 /// User-configurable settings. `#[serde(default)]` keeps old files
 /// forward-compatible as new fields are added.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,7 +33,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            toggle_shortcut: "Alt+Space".into(),
+            toggle_shortcut: DEFAULT_TOGGLE_SHORTCUT.into(),
             hide_on_blur: true,
             theme: "dark".into(),
         }
