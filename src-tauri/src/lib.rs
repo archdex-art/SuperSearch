@@ -511,15 +511,47 @@ pub fn run() {
             let settings = settings_store.get();
             app.manage(settings_store.clone());
 
-            // Register the global summon/dismiss hotkey from settings. A shortcut
-            // macOS itself reserves (e.g. Control+Space for input-source
-            // switching) is refused by `register_toggle` rather than accepted
-            // and left to flake — fall back to the built-in default and persist
-            // the correction so this self-heals without needing a settings UI.
-            match register_toggle(&handle, &settings.toggle_shortcut) {
+            // Register the global summon/dismiss hotkey from settings.
+            //
+            // Retry the *same* shortcut a few times with a short backoff
+            // before giving up on it: a hotkey a process just released (an
+            // old duplicate instance killed via `single_instance`, or a
+            // `cargo tauri dev` restart cycle) isn't always immediately
+            // available to the next registrant — macOS can take a moment to
+            // tear down the previous Carbon `RegisterEventHotKey` binding.
+            // Retrying beats declaring the app hotkey-less on a transient
+            // failure — the previous version only ever fell back to the
+            // *default* shortcut, and only when the configured one already
+            // differed from it, so a transient failure on an
+            // already-default configuration (the common case) silently left
+            // the app with no working hotkey at all until the next restart.
+            //
+            // A shortcut macOS itself reserves (e.g. Control+Space for
+            // input-source switching) is refused by `register_toggle`
+            // outright rather than accepted and left to flake — retrying
+            // that is pointless, so fall back to the built-in default and
+            // persist the correction so this self-heals without needing a
+            // settings UI.
+            const HOTKEY_RETRY_ATTEMPTS: u32 = 3;
+            const HOTKEY_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(200);
+            let mut result = register_toggle(&handle, &settings.toggle_shortcut);
+            for attempt in 1..HOTKEY_RETRY_ATTEMPTS {
+                if result.is_ok() {
+                    break;
+                }
+                warn!(
+                    attempt,
+                    error = ?result.as_ref().err(),
+                    shortcut = %settings.toggle_shortcut,
+                    "Global shortcut registration failed, retrying"
+                );
+                std::thread::sleep(HOTKEY_RETRY_DELAY);
+                result = register_toggle(&handle, &settings.toggle_shortcut);
+            }
+            match result {
                 Ok(()) => info!(shortcut = %settings.toggle_shortcut, "Global toggle shortcut registered"),
                 Err(e) => {
-                    error!(error = %e, shortcut = %settings.toggle_shortcut, "Failed to register global shortcut");
+                    error!(error = %e, shortcut = %settings.toggle_shortcut, "Failed to register global shortcut after retries");
                     if settings.toggle_shortcut != settings::DEFAULT_TOGGLE_SHORTCUT {
                         match register_toggle(&handle, settings::DEFAULT_TOGGLE_SHORTCUT) {
                             Ok(()) => {

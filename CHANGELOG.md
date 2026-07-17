@@ -5,6 +5,27 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versions
 correspond to [GitHub Releases](https://github.com/archdex-art/SuperSearch/releases)
 and their published installers.
 
+## [0.1.16] — 2026-07-17
+
+Fixes the hotkey going completely silent instead of just "unreliable."
+
+### Fixed
+- **The hotkey could register zero times instead of falling back.** The
+  0.1.15 self-heal only ever retried with the *default* shortcut, and only
+  when the configured shortcut already differed from it — so a transient
+  registration failure while the configured shortcut *was already* the
+  default (the common case) left the app with no working hotkey at all
+  until the next restart, no retry, no fallback. This is exactly what
+  happens when an old build is still squatting on the same combo: confirmed
+  live via `ps aux` finding a pre-0.1.15 `/Applications/SuperSearch.app`
+  process still running (started well before the fix was pulled) still
+  holding `Alt+Space`, which the newly-started process's own registration
+  attempt then silently lost to. Registration now retries the *same*
+  shortcut up to 3 times with a 200ms backoff before giving up on it —
+  covers the OS taking a moment to release a hotkey a just-exited duplicate
+  process (an old build, or a `single_instance`/dev-restart handoff) was
+  still holding.
+
 ## [0.1.15] — 2026-07-17
 
 Three fixes for "the hotkey doesn't reliably summon the palette," found while
@@ -410,7 +431,8 @@ First cross-platform release — macOS, Linux, and Windows.
 
 ---
 
-[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.15...HEAD
+[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.16...HEAD
+[0.1.16]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.16
 [0.1.15]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.15
 [0.1.14]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.14
 [0.1.13]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.13
