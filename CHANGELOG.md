@@ -5,6 +5,33 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versions
 correspond to [GitHub Releases](https://github.com/archdex-art/SuperSearch/releases)
 and their published installers.
 
+## [0.1.17] — 2026-07-17
+
+Fixes the actual root cause behind the "hotkey doesn't work" reports: the
+capture UI itself could persist a corrupted shortcut.
+
+### Fixed
+- **Rebinding the hotkey to an Option/Alt combo could silently corrupt it.**
+  Live log evidence: `Global shortcut registration failed ... error=Found
+  empty token while parsing hotkey: Alt+\u{a0}`. The General pane's capture
+  UI built the accelerator from `KeyboardEvent.key` — the *composed*
+  character — but macOS recomposes many keys under Option into a different
+  Unicode character than what's printed on the keycap: Option+Space's `key`
+  is a non-breaking space (U+00A0), not a plain `" "`, and Option+letters
+  compose accented characters (Option+C → "ç"). The capture UI showed
+  "Alt+Space" (the *display* used the physical key label) but silently
+  persisted `"Alt+<NBSP>"` (built from the composed character) to
+  `settings.json` — invisible until the next boot's registration attempt
+  rejected it outright. The 0.1.15/0.1.16 self-heal recovered the hotkey
+  back to the default afterward, but the underlying capture bug meant
+  rebinding to *any* Option combo reproduced it every time.
+  `toAccelerator` now resolves letters/digits/Space from
+  `KeyboardEvent.code` (the physical key, unaffected by modifier
+  composition) instead of `key`. Verified live: simulated the exact
+  Option+Space event macOS actually sends (`code: "Space", key: "\u00A0"`)
+  and confirmed it now captures as `Alt+Space`; same for Option+C
+  (`key: "ç"`) capturing as `Alt+C`.
+
 ## [0.1.16] — 2026-07-17
 
 Fixes the hotkey going completely silent instead of just "unreliable."
@@ -431,7 +458,8 @@ First cross-platform release — macOS, Linux, and Windows.
 
 ---
 
-[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.16...HEAD
+[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.17...HEAD
+[0.1.17]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.17
 [0.1.16]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.16
 [0.1.15]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.15
 [0.1.14]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.14
