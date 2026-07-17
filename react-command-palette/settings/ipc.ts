@@ -17,11 +17,20 @@ export async function getSettings(): Promise<Settings> {
   return { ...mockSettings };
 }
 
-export async function updateSettings(settings: Settings): Promise<void> {
+/** `rev` is a strictly-increasing counter the caller bumps once per issued
+ *  patch (see `SettingsApp.tsx`'s `patchSettings`) — the settings window
+ *  fires this on every step of a color-picker drag, so several calls can be
+ *  in flight at once with no guarantee they resolve in the order they were
+ *  issued. The backend (and this mock, for parity) discard a write whose
+ *  `rev` isn't newer than the last-applied one, so a slow, out-of-order
+ *  early drag frame can never clobber the final color back onto disk. */
+export async function updateSettings(settings: Settings, rev: number): Promise<void> {
   if (isTauri) {
-    await tauriInvoke("update_settings", { settings });
+    await tauriInvoke("update_settings", { settings, rev });
     return;
   }
+  if (rev <= mockAppliedRev) return; // stale — a newer patch already won
+  mockAppliedRev = rev;
   mockSettings = { ...settings };
 }
 
@@ -121,6 +130,8 @@ let mockSettings: Settings = {
   theme: "dark",
   accent_color: null,
 };
+/** Mirrors the rev guard in `SettingsStore::set` for browser-dev parity. */
+let mockAppliedRev = 0;
 
 let mockExtensions: ExtensionInfo[] = [
   {

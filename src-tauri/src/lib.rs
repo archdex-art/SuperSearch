@@ -472,7 +472,7 @@ pub fn run() {
                                 );
                                 let mut corrected = settings.clone();
                                 corrected.toggle_shortcut = settings::DEFAULT_TOGGLE_SHORTCUT.into();
-                                let _ = settings_store.set(corrected);
+                                let _ = settings_store.force_set(corrected);
                             }
                             Err(e2) => error!(error = %e2, "Fallback shortcut registration also failed"),
                         }
