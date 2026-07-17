@@ -22,11 +22,35 @@ function toAccelerator(e: KeyboardEvent): string | null {
   if (e.altKey) mods.push("Alt");
   if (e.shiftKey) mods.push("Shift");
   if (mods.length === 0) return null; // require at least one modifier
-  let key = e.key;
-  if (key === " ") key = "Space";
-  else if (key.length === 1) key = key.toUpperCase();
-  else if (!/^[A-Za-z0-9]/.test(key)) return null; // Escape, Tab, etc. — not bindable
+  const key = codeToAcceleratorKey(e.code, e.key);
+  if (key == null) return null;
   return [...mods, key].join("+");
+}
+
+/** Resolve the pressed key to Tauri accelerator syntax from `code` (the
+ *  *physical* key) wherever possible, not `key` (the *composed* character).
+ *
+ *  macOS recomposes many keys under Option/Alt into a different Unicode
+ *  character than what's physically printed on the keycap — Option+Space's
+ *  `key` is a non-breaking space (U+00A0), not `" "`; Option+letters compose
+ *  accented characters ("Option+C" → "ç"). Since Alt is one of the four
+ *  modifiers this exact capture UI expects users to hold, keying off `key`
+ *  silently persisted a corrupted accelerator like `"Alt+\u00A0"` straight
+ *  to `settings.json` — invisible in the UI (looked like a normal capture),
+ *  but rejected outright by the OS accelerator parser at registration time
+ *  ("Found empty token while parsing hotkey"), leaving the hotkey broken
+ *  until the boot-time self-heal fell back to the default. `code` names the
+ *  physical key regardless of what a modifier composes it into. */
+function codeToAcceleratorKey(code: string, fallbackKey: string): string | null {
+  if (code === "Space") return "Space";
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit[0-9]$/.test(code)) return code.slice(5);
+  // Unrecognized physical key (arrows, Escape, function keys, punctuation,
+  // …) — `key` is stable for these regardless of modifiers, since Option
+  // only recomposes *printable* characters.
+  if (fallbackKey.length === 1) return fallbackKey.toUpperCase();
+  if (/^[A-Za-z0-9]/.test(fallbackKey)) return fallbackKey;
+  return null; // Tab, Escape's siblings that aren't bindable, etc.
 }
 
 export function GeneralPane({
