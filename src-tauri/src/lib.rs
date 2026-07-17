@@ -171,12 +171,44 @@ fn request_accessibility() {
 #[cfg(not(target_os = "macos"))]
 fn enable_fullscreen_overlay(_window: &tauri::WebviewWindow) {}
 
+/// Bring the whole app to the front, not just the window.
+///
+/// The palette runs under `ActivationPolicy::Accessory` (no Dock icon), and
+/// accessory apps are the one case where `WebviewWindow::set_focus()` alone
+/// is unreliable on macOS: `set_focus()` calls `makeKeyAndOrderFront:` on the
+/// *window*, but doesn't activate the *process* — when a background global
+/// hotkey summons an accessory app while a different app currently holds
+/// focus, AppKit can leave the window visually shown yet not actually key,
+/// so it never receives keyboard input (looks exactly like "the hotkey
+/// didn't do anything"). `activateIgnoringOtherApps:` is the process-level
+/// activation `set_focus()` doesn't do on its own.
+#[cfg(target_os = "macos")]
+fn activate_app() {
+    use objc2::msg_send;
+    use objc2::runtime::AnyObject;
+
+    // SAFETY: `sharedApplication` returns the process-wide singleton
+    // `NSApplication` instance, always valid once AppKit is initialized
+    // (guaranteed by the time `setup`/hotkey handlers run). `true` is a
+    // plain `BOOL` argument; this call has no other side effects besides
+    // the documented app-activation behavior.
+    unsafe {
+        let cls = objc2::class!(NSApplication);
+        let app: *mut AnyObject = msg_send![cls, sharedApplication];
+        let _: () = msg_send![app, activateIgnoringOtherApps: true];
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn activate_app() {}
+
 /// Show, center, and focus the palette, then tell the UI to reset its input.
 fn show_palette(window: &tauri::WebviewWindow) {
     // Re-assert the overlay collection-behavior + high window level every time:
     // macOS can drop them when the window is ordered out and back across
     // Spaces, which would make the palette fall behind a full-screen app.
     enable_fullscreen_overlay(window);
+    activate_app();
     let _ = window.center();
     let _ = window.show();
     let _ = window.set_focus();
@@ -368,7 +400,32 @@ pub fn run() {
     let app_state = AppState::from_kernel(&kernel, boot_ms);
 
     // 4. Build the Tauri app.
+    //
+    // `single_instance` MUST be the first plugin registered (Tauri's own
+    // recommendation) and is the actual fix for a very real class of bug: a
+    // second `SuperSearch.app`/`cargo tauri dev` launch used to start a
+    // *second, fully independent process* — its own `SettingsStore` loaded
+    // once from disk at its own boot time, its own attempt at registering
+    // the same global hotkey. With two processes racing for one hotkey and
+    // each caching its own now-divergent settings snapshot in memory,
+    // picking a new accent color in one process's Settings window persisted
+    // correctly to disk, but the *other*, still-running process never
+    // re-read it — so summoning "the palette" could nondeterministically
+    // show either process's window depending on which one's hotkey
+    // registration the OS honored that time, and interacting with the stale
+    // one (e.g. toggling an unrelated setting) would spread its own outdated
+    // `accent_color` right back over the correct value on disk. This isn't
+    // a race *within* one process (see `SettingsStore::set`'s `rev` guard
+    // for that one) — it's two independent processes with no shared memory
+    // at all, which no amount of in-process ordering can fix. A second
+    // launch now just re-summons the one real instance's palette instead of
+    // starting a competing process.
     let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                show_palette(&window);
+            }
+        }))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .manage(app_state)

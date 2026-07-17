@@ -5,6 +5,47 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versions
 correspond to [GitHub Releases](https://github.com/archdex-art/SuperSearch/releases)
 and their published installers.
 
+## [0.1.15] — 2026-07-17
+
+Three fixes for "the hotkey doesn't reliably summon the palette," found while
+chasing a settings-persistence report back to its actual root cause.
+
+### Fixed
+- **Two competing processes could run at once, each with its own cached
+  settings.** A second launch (a stray `/Applications` install left running
+  alongside a `cargo tauri dev` session, or an overlapping dev restart)
+  started a fully independent process — its own `SettingsStore` loaded once
+  from disk at its own boot time, its own attempt at registering the same
+  global hotkey. Two processes racing for one hotkey meant summoning "the
+  palette" could nondeterministically show either one's window, and each had
+  its own stale view of settings (the `rev` guard added in 0.1.14 only
+  covers races *within* one process — it can't help across two with no
+  shared memory). Added `tauri-plugin-single-instance`, registered first per
+  Tauri's requirement: a second launch now just re-summons the one running
+  instance's palette instead of starting a competing process. Verified live
+  — launched the binary twice and confirmed via `ps` that the second
+  process exits (defunct, status 0) instead of staying alive.
+- **The hotkey could show the window without it ever actually taking
+  keyboard focus.** The palette runs under `ActivationPolicy::Accessory` (no
+  Dock icon) — the one case where `WebviewWindow::set_focus()` alone is
+  unreliable on macOS. `set_focus()` calls `makeKeyAndOrderFront:` on the
+  *window*; it doesn't activate the *process*. Summoned from a background
+  global hotkey while a different app holds focus, an accessory app's window
+  can end up visually shown but not actually key, so it silently never
+  receives keyboard input — indistinguishable from "the hotkey did nothing."
+  `show_palette` now also calls `activateIgnoringOtherApps:` on
+  `NSApplication`, which `set_focus()` never did.
+- **A hotkey press during the close animation could get silently dropped.**
+  `closingRef` (read by the toggle-hotkey listener to tell "genuinely idle"
+  apart from "still animating closed") was mirrored from React state via a
+  `useEffect`, which only runs *after* React commits the next render. A
+  hotkey re-summon landing in that gap — e.g. right after `hide_on_blur`
+  starts a close — read the *previous* value of `closingRef.current` and hit
+  the wrong branch: it called `hide()` again (a no-op, already closing)
+  instead of cancelling the close and reopening. `closingRef` is now updated
+  synchronously at the same call site as `setClosing`, closing that window
+  entirely rather than narrowing it.
+
 ## [0.1.14] — 2026-07-17
 
 Fixes an accent-color persistence race: a color chosen in Settings could
@@ -369,7 +410,8 @@ First cross-platform release — macOS, Linux, and Windows.
 
 ---
 
-[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.14...HEAD
+[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.15...HEAD
+[0.1.15]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.15
 [0.1.14]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.14
 [0.1.13]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.13
 [0.1.12]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.12

@@ -1,6 +1,6 @@
 [package]
 name = "supersearch-app"
-version = "0.1.14"
+version = "0.1.15"
 edition = "2021"
 description = "SuperSearch — AI-Native Productivity Layer Desktop App"
 
@@ -8,6 +8,7 @@ description = "SuperSearch — AI-Native Productivity Layer Desktop App"
 supersearch-runtime = { path = "../crates/supersearch-runtime" }
 tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-global-shortcut = "2"
+tauri-plugin-single-instance = "2"
 tauri-plugin-dialog = "2"
 # Opt-in: auto-update requires signing keys (plugins.updater.pubkey), so it is
 # off by default and enabled for release builds via `--features updater`.
