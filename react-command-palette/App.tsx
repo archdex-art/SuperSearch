@@ -50,24 +50,32 @@ export default function App() {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const baseId = useId();
-  // Mirrors `closing` for the toggle-hotkey listener below, which is
-  // registered once and would otherwise read a stale value out of a closure
-  // captured on first mount.
+  // Mirrors `closing` for the toggle-hotkey listener below (registered once
+  // on mount, so a plain closure over `closing` would read a stale value).
+  // Updated synchronously by `setClosingBoth`, NOT via a `useEffect` mirror —
+  // an effect only runs after React commits the next render, which leaves a
+  // real gap: a hotkey re-summon landing in that gap during the ~150ms exit
+  // animation would read the *previous* value of `closingRef.current` and
+  // silently drop the summon (see the `toggle-request` listener) instead of
+  // cancelling the close and reopening. This is user-visible as "the hotkey
+  // doesn't do anything" whenever a press lands while the panel is still
+  // finishing a close.
   const closingRef = useRef(false);
-  useEffect(() => {
-    closingRef.current = closing;
-  }, [closing]);
+  const setClosingBoth = useCallback((value: boolean) => {
+    closingRef.current = value;
+    setClosing(value);
+  }, []);
 
-  const hide = useCallback(() => setClosing(true), []);
+  const hide = useCallback(() => setClosingBoth(true), [setClosingBoth]);
 
   /** Fires when the panel's `animate` variant finishes transitioning. Only
    *  the "exit" variant should ever trigger the real window hide. */
   const onPanelAnimationComplete = useCallback((definition: unknown) => {
     if (definition === "exit") {
       void invoke("hide_window");
-      setClosing(false);
+      setClosingBoth(false);
     }
-  }, []);
+  }, [setClosingBoth]);
 
   // Debounced server-side search (native results + enabled extensions).
   useEffect(() => {
@@ -229,7 +237,7 @@ export default function App() {
     let cancelled = false;
     listen("supersearch://toggle-request", () => {
       if (closingRef.current) {
-        setClosing(false);
+        setClosingBoth(false);
         requestAnimationFrame(() => inputRef.current?.focus());
       } else {
         hide();
