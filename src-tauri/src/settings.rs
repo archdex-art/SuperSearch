@@ -49,9 +49,12 @@ impl Default for Settings {
 }
 
 /// Thread-safe, file-backed settings store.
+///
+/// `settings`/`applied_rev` share one lock so a check-then-write decision is
+/// atomic — see `set()`.
 pub struct SettingsStore {
     path: PathBuf,
-    settings: RwLock<Settings>,
+    state: RwLock<(Settings, u64)>,
 }
 
 impl SettingsStore {
@@ -62,26 +65,66 @@ impl SettingsStore {
             .ok()
             .and_then(|t| serde_json::from_str(&t).ok())
             .unwrap_or_default();
-        Self { path, settings: RwLock::new(settings) }
+        Self { path, state: RwLock::new((settings, 0)) }
     }
 
     /// Current settings snapshot.
     pub fn get(&self) -> Settings {
-        self.settings.read().clone()
+        self.state.read().0.clone()
     }
 
-    /// Replace settings and persist to disk.
-    pub fn set(&self, new: Settings) -> Result<(), String> {
-        *self.settings.write() = new;
-        self.persist()
-    }
-
-    fn persist(&self) -> Result<(), String> {
+    /// Replace settings and persist to disk — but only if `rev` is newer than
+    /// the last-applied write. Returns `Ok(true)` if this call's data won and
+    /// was persisted, `Ok(false)` if it lost to a write the caller already
+    /// knows is more recent and was silently discarded.
+    ///
+    /// The settings window fires `update_settings` on every keystroke/drag
+    /// step of the accent color picker (`HexColorPicker.onChange`), so many
+    /// overlapping IPC calls can be in flight at once. Tauri dispatches each
+    /// command invocation to its own task, so completion order is **not**
+    /// guaranteed to match call order — without this guard, a slower older
+    /// write (e.g. an early drag frame) can complete *after* the final color
+    /// the user actually released on, silently overwriting it back to a
+    /// stale value on disk. `rev` is a counter the frontend increments once
+    /// per issued patch (see `SettingsApp.tsx`'s `patchSettings`), so it's
+    /// strictly increasing in call order even when responses race; comparing
+    /// it while holding the same lock we write under (not a separate atomic
+    /// check followed by a separate write) closes the check-then-act window
+    /// that a plain `AtomicU64::fetch_max` guard alone would leave open.
+    pub fn set(&self, new: Settings, rev: u64) -> Result<bool, String> {
+        let mut state = self.state.write();
+        if rev <= state.1 {
+            return Ok(false);
+        }
+        state.0 = new;
+        state.1 = rev;
+        let json = serde_json::to_string_pretty(&state.0).map_err(|e| e.to_string())?;
+        drop(state);
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
-        let json = serde_json::to_string_pretty(&*self.settings.read())
-            .map_err(|e| e.to_string())?;
+        std::fs::write(&self.path, json).map_err(|e| e.to_string())?;
+        Ok(true)
+    }
+
+    /// Unconditionally replace settings and persist — bypassing the `rev`
+    /// guard entirely, including resetting the applied-rev counter to 0.
+    /// For internal, one-time corrections that happen *before* any frontend
+    /// writes exist yet (currently just the boot-time self-heal that
+    /// overwrites a macOS-reserved shortcut), never for anything racing
+    /// against `update_settings` — using this after the frontend has already
+    /// issued patches would let this call clobber a newer one, and resetting
+    /// the rev counter to 0 would make a *subsequent* stale write look valid
+    /// again.
+    pub fn force_set(&self, new: Settings) -> Result<(), String> {
+        let mut state = self.state.write();
+        state.0 = new;
+        state.1 = 0;
+        let json = serde_json::to_string_pretty(&state.0).map_err(|e| e.to_string())?;
+        drop(state);
+        if let Some(parent) = self.path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
         std::fs::write(&self.path, json).map_err(|e| e.to_string())
     }
 }
@@ -99,12 +142,15 @@ mod tests {
         assert!(s.hide_on_blur);
 
         store
-            .set(Settings {
-                toggle_shortcut: "CommandOrControl+Space".into(),
-                hide_on_blur: false,
-                theme: "light".into(),
-                accent_color: Some("#22d3ee".into()),
-            })
+            .set(
+                Settings {
+                    toggle_shortcut: "CommandOrControl+Space".into(),
+                    hide_on_blur: false,
+                    theme: "light".into(),
+                    accent_color: Some("#22d3ee".into()),
+                },
+                1,
+            )
             .unwrap();
 
         // A fresh store reading the same dir sees the persisted values.
@@ -130,5 +176,38 @@ mod tests {
         let s = SettingsStore::load(dir.path().to_path_buf()).get();
         assert_eq!(s.toggle_shortcut, "Alt+Space");
         assert_eq!(s.accent_color, None);
+    }
+
+    #[test]
+    fn stale_out_of_order_write_is_discarded() {
+        // Simulates two overlapping `update_settings` calls completing in
+        // the *opposite* order they were issued in (exactly what an
+        // unthrottled color-picker drag can trigger — see `SettingsStore::set`'s
+        // doc comment). The higher-rev (later-issued) write must win even
+        // though its `set()` call lands first.
+        let dir = tempfile::tempdir().unwrap();
+        let store = SettingsStore::load(dir.path().to_path_buf());
+
+        // rev 2 ("the final color the user released on") completes first.
+        let applied = store
+            .set(
+                Settings { accent_color: Some("#3b82f6".into()), ..Settings::default() },
+                2,
+            )
+            .unwrap();
+        assert!(applied);
+
+        // rev 1 (an earlier drag frame) completes second — must be discarded.
+        let applied = store
+            .set(
+                Settings { accent_color: Some("#a78bfa".into()), ..Settings::default() },
+                1,
+            )
+            .unwrap();
+        assert!(!applied);
+
+        assert_eq!(store.get().accent_color.as_deref(), Some("#3b82f6"));
+        let reloaded = SettingsStore::load(dir.path().to_path_buf());
+        assert_eq!(reloaded.get().accent_color.as_deref(), Some("#3b82f6"));
     }
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { listen } from "../bridge";
 import { applyAccent, applyTheme } from "../theme";
@@ -45,6 +45,13 @@ export function SettingsApp() {
     };
   }, []);
 
+  // Strictly-increasing per-window counter, bumped once per issued patch —
+  // see `SettingsStore::set`'s doc comment for why `update_settings` needs
+  // this (an unthrottled color-picker drag fires many overlapping IPC
+  // calls, and Tauri doesn't guarantee they *complete* in the order they
+  // were *issued*).
+  const revRef = useRef(0);
+
   const patchSettings = useCallback((patch: Partial<Settings>) => {
     setSettings((prev) => {
       if (!prev) return prev;
@@ -52,7 +59,8 @@ export function SettingsApp() {
       if ("accent_color" in patch) applyAccent(next.accent_color);
       if ("theme" in patch) applyTheme(next.theme);
       setSaving(true);
-      void updateSettings(next).finally(() => setSaving(false));
+      const rev = ++revRef.current;
+      void updateSettings(next, rev).finally(() => setSaving(false));
       return next;
     });
   }, []);

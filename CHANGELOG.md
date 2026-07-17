@@ -5,6 +5,29 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versions
 correspond to [GitHub Releases](https://github.com/archdex-art/SuperSearch/releases)
 and their published installers.
 
+## [0.1.14] — 2026-07-17
+
+Fixes an accent-color persistence race: a color chosen in Settings could
+silently revert to the default on the next launch.
+
+### Fixed
+- **A picked accent color could get clobbered back to the default.**
+  `update_settings` fires on every step of the Appearance accent picker
+  (each `HexColorPicker` drag frame, and rapid preset clicks), so several
+  `update_settings` IPC calls can be in flight at once. Tauri dispatches
+  each command invocation to its own task and does not guarantee they
+  *complete* in the order they were *issued* — an earlier, slower write
+  (e.g. an early drag frame, or an accidental "Amber" click quickly followed
+  by the intended color) could finish *after* the final color and silently
+  overwrite `settings.json` back to a stale value. The running session kept
+  showing the correct color (already applied locally), so nothing looked
+  wrong until the next full quit-and-relaunch read the stale value back off
+  disk. `SettingsStore::set` now takes a strictly-increasing `rev` the
+  frontend bumps once per issued patch, and discards any write whose `rev`
+  isn't newer than the last one actually applied — the newest *issued*
+  change always wins on disk, regardless of which IPC call happens to land
+  first. Covered by `settings::tests::stale_out_of_order_write_is_discarded`.
+
 ## [0.1.13] — 2026-07-17
 
 Extends the base theme to the main palette window (it only ever reached the
@@ -346,7 +369,8 @@ First cross-platform release — macOS, Linux, and Windows.
 
 ---
 
-[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.13...HEAD
+[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.14...HEAD
+[0.1.14]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.14
 [0.1.13]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.13
 [0.1.12]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.12
 [0.1.11]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.11

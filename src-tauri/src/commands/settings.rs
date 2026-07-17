@@ -15,14 +15,29 @@ pub fn get_settings(store: tauri::State<'_, Arc<SettingsStore>>) -> Settings {
 
 /// Persist new settings. If the toggle shortcut changed, re-register the global
 /// hotkey atomically so the change takes effect immediately.
+///
+/// `rev` is a per-window, strictly-increasing counter the frontend bumps on
+/// every issued patch (see `SettingsApp.tsx`'s `patchSettings`). The settings
+/// UI fires this command on every step of a color-picker drag, so several
+/// calls can be in flight at once with no guarantee they *complete* in the
+/// order they were *issued* — `SettingsStore::set` uses `rev` to discard a
+/// stale, out-of-order write instead of letting it clobber a newer one back
+/// onto disk. See its doc comment for the full race.
 #[command]
 pub fn update_settings(
     settings: Settings,
+    rev: u64,
     app: AppHandle,
     store: tauri::State<'_, Arc<SettingsStore>>,
 ) -> Result<(), String> {
     let old = store.get();
-    store.set(settings.clone())?;
+    let applied = store.set(settings.clone(), rev)?;
+    if !applied {
+        // A newer patch already won; this one is stale and must not rebind
+        // the hotkey or broadcast — that would momentarily flip every
+        // window back to this call's older values.
+        return Ok(());
+    }
     if settings.toggle_shortcut != old.toggle_shortcut {
         crate::rebind_toggle(&app, &old.toggle_shortcut, &settings.toggle_shortcut)?;
     }
