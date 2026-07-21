@@ -69,9 +69,16 @@ export default function App() {
   const hide = useCallback(() => setClosingBoth(true), [setClosingBoth]);
 
   /** Fires when the panel's `animate` variant finishes transitioning. Only
-   *  the "exit" variant should ever trigger the real window hide. */
+   *  the "exit" variant should ever trigger the real window hide — and only
+   *  while a close is still actually pending: macOS can suspend this webview
+   *  mid-exit-animation (App Nap, occlusion, sleep), in which case the Rust
+   *  side force-hides the window after a deadline (see `CloseHandoff` in
+   *  lib.rs) and a later summon resets `closing`. When the webview resumes
+   *  it can still flush the *old* animation's completion callback — without
+   *  the `closingRef` guard that stale callback would hide a palette the
+   *  user just summoned. */
   const onPanelAnimationComplete = useCallback((definition: unknown) => {
-    if (definition === "exit") {
+    if (definition === "exit" && closingRef.current) {
       void invoke("hide_window");
       setClosingBoth(false);
     }
@@ -155,6 +162,13 @@ export default function App() {
     // makes the `.then` unlisten immediately instead of stashing the handle.
     let cancelled = false;
     listen("supersearch://reset", () => {
+      // A fresh summon unconditionally cancels any pending close. If the
+      // webview was suspended mid-exit-animation, `closing` is still stuck
+      // true from that aborted close (Rust force-hid the window instead —
+      // see `CloseHandoff` in lib.rs); without this reset the panel would
+      // re-render in its "exit" variant and the summoned window would show
+      // nothing.
+      setClosingBoth(false);
       setQuery("");
       setRows([]);
       setActiveIndex(0);
