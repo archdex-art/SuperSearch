@@ -1,6 +1,6 @@
 //! Window control command — keeps privileged window actions behind Tauri IPC.
 
-use tauri::command;
+use tauri::{command, Manager};
 
 /// Hide the main application window. Called from the frontend *after* it has
 /// played the panel's exit animation (see `supersearch://request-close` /
@@ -9,6 +9,9 @@ use tauri::command;
 /// closed before the native window actually disappears.
 #[command]
 pub fn hide_window(window: tauri::Window) -> Result<(), String> {
+    // The frontend completed the animated-close handoff — disarm the
+    // watchdog that would otherwise force-hide (see `CloseHandoff`).
+    crate::resolve_close_handoff(window.app_handle());
     window.hide().map_err(|error| error.to_string())
 }
 

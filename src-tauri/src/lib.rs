@@ -7,6 +7,7 @@ pub mod state;
 pub mod settings;
 pub mod commands;
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 use tracing::{error, info, warn};
@@ -202,8 +203,114 @@ fn activate_app() {
 #[cfg(not(target_os = "macos"))]
 fn activate_app() {}
 
+/// Opt this process out of App Nap for the app's whole lifetime.
+///
+/// The palette is a Dock-less accessory app that spends nearly all of its
+/// time with a hidden (or transparent) window — exactly the profile macOS
+/// App Nap targets. When napped, the WebView's timers and rAF callbacks are
+/// suspended, which (a) freezes the exit animation mid-close so the
+/// `hide_window` handoff never completes (see [`CloseHandoff`]), and (b)
+/// leaves a freshly summoned window blank until the process fully wakes. A
+/// summon-anything-instantly launcher must stay ready while backgrounded,
+/// so take a permanent `NSProcessInfo` activity assertion. The
+/// `AllowingIdleSystemSleep` variant only exempts the app from App Nap /
+/// timer coalescing — it does NOT keep the machine awake.
+#[cfg(target_os = "macos")]
+fn disable_app_nap() {
+    use objc2::msg_send;
+    use objc2::runtime::AnyObject;
+
+    // NSActivityUserInitiatedAllowingIdleSystemSleep =
+    //   NSActivityUserInitiated (0x00FFFFFF) & ~NSActivityIdleSystemSleepDisabled (1 << 20)
+    const USER_INITIATED_ALLOWING_IDLE_SYSTEM_SLEEP: u64 = 0x00FF_FFFF & !(1u64 << 20);
+
+    // SAFETY: standard Foundation calls on the process-wide NSProcessInfo
+    // singleton. The returned activity token is retained and deliberately
+    // leaked — the assertion must hold for the app's entire lifetime, and
+    // releasing it would re-enable App Nap.
+    unsafe {
+        let reason: *mut AnyObject = msg_send![
+            objc2::class!(NSString),
+            stringWithUTF8String: c"SuperSearch global hotkey must stay responsive".as_ptr()
+        ];
+        let process_info: *mut AnyObject = msg_send![objc2::class!(NSProcessInfo), processInfo];
+        let activity: *mut AnyObject = msg_send![
+            process_info,
+            beginActivityWithOptions: USER_INITIATED_ALLOWING_IDLE_SYSTEM_SLEEP,
+            reason: reason
+        ];
+        let _: *mut AnyObject = msg_send![activity, retain];
+    }
+    info!("App Nap disabled for the process lifetime");
+}
+
+/// Tracks the animated-close handoff between Rust and the webview.
+///
+/// Dismissal is a two-step protocol: Rust emits a close/toggle event, the
+/// frontend plays its ~150ms exit animation, and only then invokes
+/// `hide_window` to order the native window out. That protocol has a failure
+/// mode nothing used to guard: macOS can suspend the webview's timers and
+/// rAF callbacks (App Nap, occlusion, system sleep) *between* the two steps,
+/// so the exit animation never finishes and `hide_window` never arrives. The
+/// window is then stuck `is_visible() == true` while drawing nothing, and —
+/// because `toggle_palette` used visibility alone to pick a branch — every
+/// subsequent hotkey press emitted another close request into the suspended
+/// webview instead of summoning. User-visible as "the hotkey stopped
+/// working", followed by the palette flickering open/closed by itself when
+/// the webview later resumes and flushes the backlog.
+///
+/// `epoch` is bumped whenever the handoff resolves (frontend calls
+/// `hide_window`, or a summon supersedes the close). A watchdog armed at
+/// emit time force-hides the window if the epoch hasn't moved by its
+/// deadline, so a suspended frontend can no longer wedge the palette.
+struct CloseHandoff {
+    epoch: AtomicU64,
+}
+
+/// How long the frontend gets to finish its exit animation and call
+/// `hide_window` before Rust assumes the webview is suspended and hides the
+/// window itself. Generous next to the ~150ms animation, small enough that
+/// a wedged palette recovers before the user's next summon attempt.
+const CLOSE_HANDOFF_DEADLINE: std::time::Duration = std::time::Duration::from_millis(800);
+
+/// Mark the close handoff resolved (see [`CloseHandoff`]): cancels any armed
+/// watchdog by advancing the epoch. Called from `hide_window` (frontend
+/// completed the close) and `show_palette` (a summon superseded it).
+pub(crate) fn resolve_close_handoff(app: &tauri::AppHandle) {
+    if let Some(handoff) = app.try_state::<Arc<CloseHandoff>>() {
+        handoff.epoch.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+/// Arm the close watchdog: if the frontend hasn't resolved the handoff
+/// within [`CLOSE_HANDOFF_DEADLINE`], force-hide the window natively so the
+/// palette can't get stuck invisible-but-"visible" (see [`CloseHandoff`]).
+fn arm_close_watchdog(app: &tauri::AppHandle) {
+    let Some(handoff) = app.try_state::<Arc<CloseHandoff>>() else { return };
+    let armed_epoch = handoff.epoch.load(Ordering::SeqCst);
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(CLOSE_HANDOFF_DEADLINE).await;
+        let Some(handoff) = app.try_state::<Arc<CloseHandoff>>() else { return };
+        if handoff.epoch.load(Ordering::SeqCst) != armed_epoch {
+            return; // frontend answered (or a summon superseded the close)
+        }
+        if let Some(window) = app.get_webview_window("main") {
+            if window.is_visible().unwrap_or(false) {
+                warn!(
+                    "Frontend never completed the close handoff (webview suspended?) — force-hiding the palette"
+                );
+                let _ = window.hide();
+            }
+        }
+    });
+}
+
 /// Show, center, and focus the palette, then tell the UI to reset its input.
 fn show_palette(window: &tauri::WebviewWindow) {
+    // A summon supersedes any in-flight close handoff — cancel its watchdog
+    // so it can't hide the window we're about to show.
+    resolve_close_handoff(window.app_handle());
     // Re-assert the overlay collection-behavior + high window level every time:
     // macOS can drop them when the window is ordered out and back across
     // Spaces, which would make the palette fall behind a full-screen app.
@@ -219,7 +326,10 @@ fn show_palette(window: &tauri::WebviewWindow) {
 /// Toggle palette visibility (the global-shortcut action).
 fn toggle_palette(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
-        if window.is_visible().unwrap_or(false) {
+        let visible = window.is_visible().unwrap_or(false);
+        let focused = window.is_focused().unwrap_or(false);
+        info!(visible, focused, "Toggle hotkey fired");
+        if visible && focused {
             // `window.is_visible()` stays true for the whole ~150ms exit
             // animation (the real `window.hide()` only happens once the
             // frontend's `hide_window` call lands), so a second hotkey press
@@ -228,7 +338,18 @@ fn toggle_palette(app: &tauri::AppHandle) {
             // know whether it's mid-close — can decide: cancel back open, or
             // finish closing. See the "toggle-request" listener in App.tsx.
             let _ = window.emit("supersearch://toggle-request", ());
+            arm_close_watchdog(app);
         } else {
+            // Not visible — or "visible" without focus, which is one of two
+            // stale states, and both want a fresh summon rather than a close
+            // request: (a) the user moved focus elsewhere while hide-on-blur
+            // is off, so the hotkey should bring the palette back to front,
+            // Spotlight-style; (b) the frontend stalled mid-close (webview
+            // suspended before the exit animation finished — see
+            // [`CloseHandoff`]) leaving a phantom "visible" window that a
+            // close request would wedge even further. A genuinely open
+            // palette is always the focused window, so `visible && !focused`
+            // can never be the ordinary open state.
             show_palette(&window);
         }
     }
@@ -421,6 +542,7 @@ pub fn run() {
     // launch now just re-summons the one real instance's palette instead of
     // starting a competing process.
     let builder = tauri::Builder::default()
+        .manage(Arc::new(CloseHandoff { epoch: AtomicU64::new(0) }))
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 show_palette(&window);
@@ -476,6 +598,7 @@ pub fn run() {
                         // Same animated-close handoff as the hotkey toggle —
                         // losing focus shouldn't snap the window away instantly.
                         let _ = window.emit("supersearch://request-close", ());
+                        arm_close_watchdog(window.app_handle());
                     }
                 }
             }
@@ -488,6 +611,11 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             {
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+                // Keep the webview's timers/rAF alive while backgrounded —
+                // App Nap suspension is what wedged the animated-close
+                // handoff and made summons paint blank. See `disable_app_nap`.
+                disable_app_nap();
 
                 // Request the *Accessibility* permission keystroke synthesis
                 // needs (app commands, lock via keystroke, etc.). The old
