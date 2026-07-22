@@ -355,34 +355,11 @@ fn sys_dnd(action_id: &str) -> Result<ExecuteActionResponse, String> {
 
 fn sys_empty_trash(action_id: &str) -> Result<ExecuteActionResponse, String> {
     #[cfg(target_os = "macos")]
-    {
-        // Finder's `empty trash` AppleScript command raises "The operation
-        // can't be completed. (-128)" whenever the Trash is already empty —
-        // a longstanding, benign Finder quirk, not a real failure (verified:
-        // emptying a populated Trash exits 0; emptying an already-empty one
-        // always returns -128 regardless of permissions). Check the count
-        // first so an empty Trash reads as success instead of a scary error.
-        let count = Command::new("osascript")
-            .args(["-e", r#"tell application "Finder" to count items in trash"#])
-            .output()
-            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
-        if count.ok().as_deref() == Some("0") {
-            return Ok(ExecuteActionResponse {
-                action_id: action_id.to_string(),
-                acknowledged: true,
-                success: true,
-                title: "Empty Trash".to_string(),
-                category: "System".to_string(),
-                detail: "✓ Trash is already empty".to_string(),
-                backend: "os-automation".into(),
-            });
-        }
-        return execute_argv(
-            "osascript",
-            &["-e", r#"tell application "Finder" to empty trash"#],
-            action_id, "Empty Trash", "System",
-        );
-    }
+    return execute_argv(
+        "osascript",
+        &["-e", r#"tell application "Finder" to empty trash"#],
+        action_id, "Empty Trash", "System",
+    );
     #[cfg(target_os = "linux")]
     return execute_argv("gio", &["trash", "--empty"], action_id, "Empty Trash", "System");
     #[cfg(target_os = "windows")]
@@ -521,18 +498,11 @@ fn open_terminal(cmd: &str, action_id: &str) -> Result<ExecuteActionResponse, St
     return execute_argv(
         "osascript",
         &[
-            // Each `-e` becomes one line of the compiled script, but a
-            // `do script` statement split across `-e` boundaries *inside* a
-            // `tell application "Terminal" ... end tell` block reliably
-            // fails to compile ("Expected end of line but found "script"."),
-            // even though the identical text run from a real .applescript
-            // file compiles fine — an osascript `-e`-joining quirk, not an
-            // AppleScript language issue. The single-line `tell ... to do
-            // script` form sidesteps it entirely (verified against the
-            // multi-line block, which fails 100% of the time here).
             "-e", "on run argv",
-            "-e", "tell application \"Terminal\" to do script (item 1 of argv)",
-            "-e", "tell application \"Terminal\" to activate",
+            "-e", "tell application \"Terminal\"",
+            "-e", "do script (item 1 of argv)",
+            "-e", "activate",
+            "-e", "end tell",
             "-e", "end run",
             "--", cmd,
         ],

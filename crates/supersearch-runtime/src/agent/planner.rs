@@ -140,12 +140,7 @@ impl TaskPlanner {
             ),
             SystemCommand::EmptyTrash => (
                 "Empty Trash",
-                // `empty trash` on an already-empty Trash raises Finder
-                // error -128 ("operation can't be completed") — a benign,
-                // longstanding Finder AppleScript quirk, not a real
-                // failure. Guard on the count so this is a silent no-op
-                // instead of a false "Empty Trash" failure.
-                r#"osascript -e 'tell application "Finder" to if (count items in trash) > 0 then empty trash'"#,
+                r#"osascript -e 'tell application "Finder" to empty trash'"#,
             ),
             SystemCommand::Screenshot => (
                 "Take Screenshot",

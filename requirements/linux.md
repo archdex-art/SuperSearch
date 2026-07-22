@@ -81,36 +81,3 @@ cargo tauri build
 ```bash
 sudo updatedb
 ```
-
-## Known limitations
-
-### Global hotkey doesn't fire under GNOME Wayland sessions
-
-Verified live on Ubuntu 24.04 (GNOME 46, Wayland — the default session type):
-`register_hotkey` succeeds and logs `Global toggle shortcut registered`, but
-the summon never fires — confirmed by injecting the exact key combo at the
-X11 protocol level (`xdotool key alt+space` through XWayland, which XTest
-delivers identically to a real keypress reaching a passive `XGrabKey` grab)
-and observing no `Toggle hotkey fired` log line.
-
-Root cause is upstream, not app-specific: SuperSearch's global shortcut
-plugin is built on the `global-hotkey` crate (v0.8.0), whose only Linux
-backend is `x11rb`/`XGrabKey` — there is no Wayland-native path. On GNOME's
-Mutter compositor, key grabs registered by an X11 client (even via XWayland)
-are not reliably forwarded to unfocused background clients under Wayland;
-the crate's own connect error even says so: *"Other window systems on Linux
-are not supported by `global-hotkey` crate."* Properly fixing this means
-adding `org.freedesktop.portal.GlobalShortcuts` (the xdg-desktop-portal
-D-Bus API) support — a real feature addition (new async D-Bus session
-handshake, user consent dialog, `Activated` signal handling), not a small
-patch, and out of scope here.
-
-**Workaround:** log in via "Ubuntu on Xorg" (select the gear icon on the
-GDM login screen) instead of the default Wayland session — the same
-`XGrabKey` mechanism works reliably on a real X11 session since key grabs
-don't need cross-protocol forwarding.
-
-All other `sys:*` commands were verified working normally under this same
-Wayland session (Do Not Disturb, Dark Mode toggle, Empty Trash, Show
-Desktop via `wmctrl` through XWayland, terminal launch, system info) — this
-limitation is specific to the global summon hotkey.
