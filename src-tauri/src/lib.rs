@@ -184,7 +184,7 @@ fn enable_fullscreen_overlay(_window: &tauri::WebviewWindow) {}
 /// didn't do anything"). `activateIgnoringOtherApps:` is the process-level
 /// activation `set_focus()` doesn't do on its own.
 #[cfg(target_os = "macos")]
-fn activate_app() {
+fn activate_app(_window: &tauri::WebviewWindow) {
     use objc2::msg_send;
     use objc2::runtime::AnyObject;
 
@@ -200,8 +200,45 @@ fn activate_app() {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
-fn activate_app() {}
+/// Windows has the same structural problem `activateIgnoringOtherApps:`
+/// solves on macOS, with a Windows-specific cause: `SetForegroundWindow`
+/// (what `WebviewWindow::set_focus()` calls under the hood) is refused by
+/// the OS for any process that isn't already the foreground process, unless
+/// that process's input queue is attached to the current foreground
+/// window's — a documented Win32 restriction meant to stop background apps
+/// from stealing focus. A global hotkey summon is *exactly* that case (a
+/// backgrounded accessory app, summoned while some other app has focus), so
+/// `set_focus()` alone silently leaves the palette visible but keyless, same
+/// as the macOS failure mode. `AttachThreadInput` temporarily joins our
+/// input queue to the foreground window's so `SetForegroundWindow` is
+/// allowed to succeed, then detaches.
+#[cfg(target_os = "windows")]
+fn activate_app(window: &tauri::WebviewWindow) {
+    use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
+    };
+
+    let Ok(hwnd) = window.hwnd() else { return };
+    // SAFETY: plain Win32 calls on handles/thread ids the API hands back;
+    // `AttachThreadInput`'s detach (third arg `false`) always runs after a
+    // successful attach, so we never leave the input queues joined.
+    unsafe {
+        let foreground = GetForegroundWindow();
+        let current_thread = GetCurrentThreadId();
+        let foreground_thread = GetWindowThreadProcessId(foreground, None);
+        let attached = foreground_thread != 0
+            && foreground_thread != current_thread
+            && AttachThreadInput(current_thread, foreground_thread, true).as_bool();
+        let _ = SetForegroundWindow(hwnd);
+        if attached {
+            let _ = AttachThreadInput(current_thread, foreground_thread, false);
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn activate_app(_window: &tauri::WebviewWindow) {}
 
 /// Opt this process out of App Nap for the app's whole lifetime.
 ///
@@ -315,7 +352,7 @@ fn show_palette(window: &tauri::WebviewWindow) {
     // macOS can drop them when the window is ordered out and back across
     // Spaces, which would make the palette fall behind a full-screen app.
     enable_fullscreen_overlay(window);
-    activate_app();
+    activate_app(window);
     let _ = window.center();
     let _ = window.show();
     let _ = window.set_focus();
