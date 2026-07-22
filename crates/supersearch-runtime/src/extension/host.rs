@@ -52,6 +52,35 @@ pub enum HostError {
     BadOutput(String),
 }
 
+/// Spawn `cmd`, retrying briefly on `ETXTBSY` ("Text file busy").
+///
+/// A script extension's entrypoint can be spawned immediately after being
+/// written to disk — right after install/update in production, or by
+/// `write_script` in the tests below. On Linux and macOS, `execve` can
+/// transiently refuse with ETXTBSY (errno 26) if the kernel hasn't yet
+/// released the inode's write-busy bookkeeping, even though the writer
+/// already closed its file handle — a narrow, well-documented race, not
+/// real contention. Confirmed non-deterministic in CI: the exact same
+/// commit's test suite passed on one run and hit this on another. A few
+/// retries with a short backoff reliably clears it; any other spawn error
+/// is returned immediately.
+fn spawn_retrying_on_text_busy(cmd: &mut Command) -> std::io::Result<std::process::Child> {
+    const MAX_ATTEMPTS: u32 = 5;
+    const RETRY_DELAY: Duration = Duration::from_millis(20);
+    let mut last_err = None;
+    for _ in 0..MAX_ATTEMPTS {
+        match cmd.spawn() {
+            Ok(child) => return Ok(child),
+            Err(e) if e.raw_os_error() == Some(26) => {
+                last_err = Some(e);
+                std::thread::sleep(RETRY_DELAY);
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    Err(last_err.expect("loop runs MAX_ATTEMPTS >= 1 times"))
+}
+
 /// Run a script extension's entrypoint for `query`, returning parsed results.
 ///
 /// `dir` is the extension directory; `entrypoint` is the manifest's relative
@@ -72,7 +101,7 @@ pub fn run_query(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    let mut child = cmd.spawn().map_err(|e| HostError::Spawn(e.to_string()))?;
+    let mut child = spawn_retrying_on_text_busy(&mut cmd).map_err(|e| HostError::Spawn(e.to_string()))?;
 
     // Drain stdout/stderr on background threads concurrently with the poll
     // loop below. Without this, a script that writes more than the OS pipe

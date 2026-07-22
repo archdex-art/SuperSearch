@@ -5,6 +5,76 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versions
 correspond to [GitHub Releases](https://github.com/archdex-art/SuperSearch/releases)
 and their published installers.
 
+## [0.1.20] — 2026-07-22
+
+Fixes two "Execute in Terminal" / "Empty Trash" system commands that failed
+every time they were invoked, with no indication of why.
+
+Also fixes the global hotkey not reliably focusing the palette on Windows —
+found and fixed while standing up and testing a Windows build for the first
+time (Parallels/Windows 11 on Apple Silicon).
+
+This release replaces v0.1.19, which was pulled: the merge's CI run hit an
+unrelated flaky test (below) that briefly looked like a regression. The
+three fixes above were already verified live and are unchanged; only the
+flaky test itself needed a fix.
+
+### Fixed
+- **"Empty Trash" always reported failure when the Trash was already
+  empty.** Live evidence: `Empty Trash: 29:40: execution error: Finder got
+  an error: The operation can't be completed. (-128)`. This isn't a
+  permissions or code bug — Finder's own `empty trash` AppleScript command
+  raises error -128 whenever there's nothing to empty (verified: emptying a
+  populated Trash exits 0; emptying an already-empty one always returns
+  -128, regardless of automation permissions). Both the palette's direct
+  `sys:empty_trash` action and the natural-language agent's `EmptyTrash`
+  system command now check the item count first (`count items in trash`,
+  and `if (count items in trash) > 0 then empty trash` respectively) so an
+  empty Trash reads as "✓ Trash is already empty" instead of a scary error.
+- **"Execute in Terminal" always failed to compile.** Live evidence:
+  `Terminal Command: 43:49: syntax error: Expected end of line but found
+  "script". (-2741)`. `open_terminal` built the AppleScript as one `-e` per
+  line — `tell application "Terminal"` / `do script (item 1 of argv)` /
+  `activate` / `end tell` — the textbook idiom found in most AppleScript
+  tutorials. Root cause: `osascript` reliably fails to compile a `do
+  script` statement that's split across `-e` boundaries *inside* a
+  `tell ... end tell` block — even though the identical text compiles fine
+  from a real `.applescript` file, and even though `tell application
+  "Terminal" to get version` (any other command) works fine split the same
+  way. Rewritten to two single-line `tell "Terminal" to do script (item 1
+  of argv)` / `tell "Terminal" to activate` statements, which sidesteps the
+  compiler quirk entirely. Verified: the exact new `osascript` invocation
+  now exits 0 and runs the command in a new Terminal tab; the old one
+  reliably reproduced the syntax error on every run.
+- **The global hotkey summoned the palette invisibly-focused on Windows.**
+  Reproduced by building and running a real Windows install (Parallels VM,
+  Windows 11 on ARM64): summoning while another app (Notepad) held focus
+  left the palette window shown but not actually keyed, mirroring a
+  previously mac-only failure mode. Root cause: `show_palette`'s
+  `activate_app()` step — which macOS needs because `set_focus()` alone
+  doesn't activate the *process*, only the window — was a no-op on Windows.
+  Windows has the same structural gap for a different reason:
+  `SetForegroundWindow` (what `set_focus()` calls internally) is refused by
+  the OS for any process that isn't already the foreground process, which a
+  background global-hotkey summon always is. `activate_app` now does the
+  standard `AttachThreadInput` + `SetForegroundWindow` dance on Windows.
+  Verified live: before the fix, summoning while Notepad had focus left
+  Notepad as the real Win32 foreground window; after the fix, the same
+  summon makes SuperSearch the foreground window immediately and it stays
+  there.
+- **Linux CI could fail with `Spawn("Text file busy (os error 26)")` on a
+  script-extension test.** Confirmed as pure flakiness, not a real bug:
+  the identical commit's test suite passed cleanly on the PR's own CI run
+  and only failed on the immediate post-merge run of the same code.
+  `extension::host::run_query` spawns a script immediately after the test
+  helper writes and `chmod +x`s it; on Linux, `execve` can transiently
+  refuse with `ETXTBSY` if the kernel hasn't yet released the inode's
+  write-busy bookkeeping, even though the writer already closed its
+  handle — a narrow, well-documented race, not real contention (and
+  plausibly reachable in production too, right after installing/updating
+  an extension). `run_query` now retries the spawn a few times with a
+  short backoff on errno 26 before giving up.
+
 ## [0.1.17] — 2026-07-17
 
 Fixes the actual root cause behind the "hotkey doesn't work" reports: the
@@ -458,7 +528,7 @@ First cross-platform release — macOS, Linux, and Windows.
 
 ---
 
-[Unreleased]: https://github.com/archdex-art/SuperSearch/compare/v0.1.17...HEAD
+[0.1.20]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.20
 [0.1.17]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.17
 [0.1.16]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.16
 [0.1.15]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.15
