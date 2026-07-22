@@ -5,7 +5,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versions
 correspond to [GitHub Releases](https://github.com/archdex-art/SuperSearch/releases)
 and their published installers.
 
-## [0.1.19] — 2026-07-22
+## [0.1.20] — 2026-07-22
 
 Fixes two "Execute in Terminal" / "Empty Trash" system commands that failed
 every time they were invoked, with no indication of why.
@@ -13,6 +13,11 @@ every time they were invoked, with no indication of why.
 Also fixes the global hotkey not reliably focusing the palette on Windows —
 found and fixed while standing up and testing a Windows build for the first
 time (Parallels/Windows 11 on Apple Silicon).
+
+This release replaces v0.1.19, which was pulled: the merge's CI run hit an
+unrelated flaky test (below) that briefly looked like a regression. The
+three fixes above were already verified live and are unchanged; only the
+flaky test itself needed a fix.
 
 ### Fixed
 - **"Empty Trash" always reported failure when the Trash was already
@@ -57,6 +62,18 @@ time (Parallels/Windows 11 on Apple Silicon).
   Notepad as the real Win32 foreground window; after the fix, the same
   summon makes SuperSearch the foreground window immediately and it stays
   there.
+- **Linux CI could fail with `Spawn("Text file busy (os error 26)")` on a
+  script-extension test.** Confirmed as pure flakiness, not a real bug:
+  the identical commit's test suite passed cleanly on the PR's own CI run
+  and only failed on the immediate post-merge run of the same code.
+  `extension::host::run_query` spawns a script immediately after the test
+  helper writes and `chmod +x`s it; on Linux, `execve` can transiently
+  refuse with `ETXTBSY` if the kernel hasn't yet released the inode's
+  write-busy bookkeeping, even though the writer already closed its
+  handle — a narrow, well-documented race, not real contention (and
+  plausibly reachable in production too, right after installing/updating
+  an extension). `run_query` now retries the spawn a few times with a
+  short backoff on errno 26 before giving up.
 
 ## [0.1.17] — 2026-07-17
 
@@ -511,7 +528,7 @@ First cross-platform release — macOS, Linux, and Windows.
 
 ---
 
-[0.1.19]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.19
+[0.1.20]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.20
 [0.1.17]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.17
 [0.1.16]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.16
 [0.1.15]: https://github.com/archdex-art/SuperSearch/releases/tag/v0.1.15
