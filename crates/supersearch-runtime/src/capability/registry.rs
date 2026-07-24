@@ -7,13 +7,12 @@
 //! Uses `DashMap` for concurrent read-heavy access (plugins checking
 //! capabilities) with infrequent writes (grants/revocations).
 
-
-use std::time::Instant;
 use dashmap::DashMap;
+use std::time::Instant;
 use tracing::info;
 
-use super::token::{CapabilityId, CapabilityToken, Permission};
 use super::namespace::Namespace;
+use super::token::{CapabilityId, CapabilityToken, Permission};
 
 /// Errors from capability registry operations.
 #[derive(Debug, thiserror::Error)]
@@ -68,7 +67,8 @@ impl CapabilityRegistry {
         // never received, defeating the "unforgeable" guarantee the token
         // system advertises.
         let mut key = [0u8; 32];
-        getrandom::getrandom(&mut key).expect("OS CSPRNG unavailable — cannot generate capability key");
+        getrandom::getrandom(&mut key)
+            .expect("OS CSPRNG unavailable — cannot generate capability key");
 
         Self {
             grants: DashMap::with_capacity(256),
@@ -115,10 +115,7 @@ impl CapabilityRegistry {
         };
 
         self.grants.insert(id, record);
-        self.by_grantee
-            .entry(grantee.clone())
-            .or_default()
-            .push(id);
+        self.by_grantee.entry(grantee.clone()).or_default().push(id);
 
         info!(
             id = %id,
@@ -215,10 +212,15 @@ impl CapabilityRegistry {
     }
 
     /// Total number of grants (including revoked, for audit purposes).
-    pub fn total_grants(&self) -> usize { self.grants.len() }
+    pub fn total_grants(&self) -> usize {
+        self.grants.len()
+    }
 
     /// Number of currently valid (non-revoked, non-expired) grants.
     pub fn active_grants(&self) -> usize {
-        self.grants.iter().filter(|r| r.value().token.is_valid()).count()
+        self.grants
+            .iter()
+            .filter(|r| r.value().token.is_valid())
+            .count()
     }
 }

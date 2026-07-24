@@ -1,0 +1,21 @@
+{
+  "name": "@supersearch/cli",
+  "version": "1.0.0",
+  "description": "SuperSearch Extension CLI",
+  "bin": {
+    "supersearch": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "commander": "^12.0.0",
+    "esbuild": "^0.28.1",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/ws": "^8.5.10",
+    "typescript": "^5.5.0"
+  }
+}

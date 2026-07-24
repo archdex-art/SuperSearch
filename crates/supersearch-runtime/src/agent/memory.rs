@@ -48,13 +48,7 @@ impl AgentMemory {
     }
 
     /// Record a completed interaction.
-    pub fn record(
-        &mut self,
-        query: &str,
-        intent_type: &str,
-        success: bool,
-        result_summary: &str,
-    ) {
+    pub fn record(&mut self, query: &str, intent_type: &str, success: bool, result_summary: &str) {
         if self.history.len() >= MAX_HISTORY {
             self.history.pop_front();
         }

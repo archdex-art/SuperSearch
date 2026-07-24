@@ -1,0 +1,20 @@
+{
+  "name": "@supersearch/reconciler",
+  "version": "1.0.0",
+  "description": "Custom React renderer for SuperSearch extensions",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@msgpack/msgpack": "^3.0.0",
+    "react": "^18.3.0",
+    "react-reconciler": "^0.29.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "@types/react-reconciler": "^0.28.0",
+    "typescript": "^5.5.0"
+  }
+}

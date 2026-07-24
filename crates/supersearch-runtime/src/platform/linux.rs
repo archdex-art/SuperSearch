@@ -171,11 +171,17 @@ mod tests {
 
         let (read_prog, read_args) = clipboard_read_cmd(Clipboard::X11);
         assert_eq!(read_prog, "xclip");
-        assert!(read_args.contains(&"-o"), "X11 read must request output mode");
+        assert!(
+            read_args.contains(&"-o"),
+            "X11 read must request output mode"
+        );
 
         let (write_prog, write_args) = clipboard_write_cmd(Clipboard::X11);
         assert_eq!(write_prog, "xclip");
-        assert!(!write_args.contains(&"-o"), "X11 write must not be output mode");
+        assert!(
+            !write_args.contains(&"-o"),
+            "X11 write must not be output mode"
+        );
     }
 
     #[test]

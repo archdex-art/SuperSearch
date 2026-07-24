@@ -16,11 +16,11 @@
 //! scheduler priority.
 
 pub mod entry;
-pub mod writer;
 pub mod reader;
 pub mod replay;
+pub mod writer;
 
-pub use entry::{JournalEntry, EntryKind, SequenceNumber};
-pub use writer::JournalWriter;
+pub use entry::{EntryKind, JournalEntry, SequenceNumber};
 pub use reader::JournalReader;
 pub use replay::ReplayEngine;
+pub use writer::JournalWriter;

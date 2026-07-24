@@ -14,18 +14,19 @@
 //! - **Deterministic**: All plans are journalable and replayable
 //! - **Capability-gated**: Every action flows through the security broker
 
-pub mod patterns;
-pub mod task_graph;
-pub mod planner;
-pub mod executor;
-pub mod controller;
-pub mod memory;
 pub mod context;
+pub mod controller;
+pub mod executor;
+pub mod mcp;
+pub mod memory;
+pub mod patterns;
+pub mod planner;
+pub mod task_graph;
 
+pub use context::ContextEngine;
 pub use controller::AgentController;
-pub use patterns::{AgentIntent, PatternEngine, SystemCommand};
-pub use task_graph::{TaskGraph, TaskNode, TaskNodeKind, TaskStatus};
-pub use planner::TaskPlanner;
 pub use executor::AgentExecutor;
 pub use memory::AgentMemory;
-pub use context::ContextEngine;
+pub use patterns::{AgentIntent, PatternEngine, SystemCommand};
+pub use planner::TaskPlanner;
+pub use task_graph::{TaskGraph, TaskNode, TaskNodeKind, TaskStatus};

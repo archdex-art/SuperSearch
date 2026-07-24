@@ -3,9 +3,8 @@
 //! Each entry is a self-contained record of a single runtime action,
 //! carrying the full payload needed for deterministic replay.
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
-
 
 /// Monotonically increasing, gap-free sequence number.
 /// Provides total ordering of all journal entries across the runtime.
@@ -21,7 +20,9 @@ impl SequenceNumber {
     }
 
     #[inline]
-    pub const fn raw(self) -> u64 { self.0 }
+    pub const fn raw(self) -> u64 {
+        self.0
+    }
 }
 
 impl std::fmt::Display for SequenceNumber {

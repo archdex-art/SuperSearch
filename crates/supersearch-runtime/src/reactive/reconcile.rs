@@ -14,12 +14,11 @@
 //! The reconciliation must be idempotent and convergent — essentially a
 //! CRDT-like merge where the speculative and canonical states converge.
 
-
 use std::time::Instant;
 use tracing::{debug, info, warn};
 
-use super::node::NodeId;
 use super::graph::DependencyGraph;
+use super::node::NodeId;
 use crate::scheduler::task::TaskId;
 
 /// A fast-path delta: the speculative change applied before graph evaluation.
@@ -39,10 +38,7 @@ pub struct FastPathDelta {
 #[derive(Debug, Clone)]
 pub enum ReconciliationResult {
     /// Speculative value matches canonical graph evaluation. No correction needed.
-    Converged {
-        signal_id: NodeId,
-        elapsed_us: u64,
-    },
+    Converged { signal_id: NodeId, elapsed_us: u64 },
     /// Speculative value diverges from canonical. A correction patch is emitted.
     Diverged {
         signal_id: NodeId,
@@ -162,11 +158,17 @@ impl ReconciliationEngine {
     }
 
     /// Number of pending deltas awaiting reconciliation.
-    pub fn pending_count(&self) -> usize { self.pending.len() }
+    pub fn pending_count(&self) -> usize {
+        self.pending.len()
+    }
 
-    pub fn total_reconciled(&self) -> u64 { self.total_reconciled }
+    pub fn total_reconciled(&self) -> u64 {
+        self.total_reconciled
+    }
     pub fn convergence_rate(&self) -> f64 {
-        if self.total_reconciled == 0 { return 1.0; }
+        if self.total_reconciled == 0 {
+            return 1.0;
+        }
         self.total_converged as f64 / self.total_reconciled as f64
     }
 }

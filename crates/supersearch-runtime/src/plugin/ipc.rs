@@ -4,10 +4,8 @@
 //! The IPC channel is a bidirectional MPSC pair with message framing
 //! and capability-gated send/receive.
 
-
+use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
-use serde::{Serialize, Deserialize};
-
 
 use crate::capability::gate::{CapabilityGate, GateDecision};
 use crate::capability::namespace::Namespace;
@@ -141,11 +139,7 @@ impl IpcChannel {
         gate: &CapabilityGate,
     ) -> Result<u64, IpcError> {
         // Capability gate check.
-        let decision = gate.check(
-            Some(token),
-            &self.namespace,
-            Permission::IpcSend,
-        );
+        let decision = gate.check(Some(token), &self.namespace, Permission::IpcSend);
         if !matches!(decision, GateDecision::Allowed { .. }) {
             return Err(IpcError::CapabilityDenied {
                 reason: "IpcSend permission denied".into(),
@@ -170,7 +164,9 @@ impl IpcChannel {
             correlation_id: None,
         };
 
-        self.to_kernel_tx.send(msg).await
+        self.to_kernel_tx
+            .send(msg)
+            .await
             .map_err(|_| IpcError::ChannelClosed)?;
 
         Ok(self.sequence)
@@ -178,7 +174,9 @@ impl IpcChannel {
 
     /// Receive a message from the kernel (kernel → plugin).
     pub async fn recv(&mut self) -> Result<IpcMessage, IpcError> {
-        self.from_kernel_rx.recv().await
+        self.from_kernel_rx
+            .recv()
+            .await
             .ok_or(IpcError::ChannelClosed)
     }
 }
@@ -186,15 +184,21 @@ impl IpcChannel {
 impl KernelIpcEndpoint {
     /// Send a message to the plugin (kernel → plugin).
     pub async fn send(&self, msg: IpcMessage) -> Result<(), IpcError> {
-        self.to_plugin_tx.send(msg).await
+        self.to_plugin_tx
+            .send(msg)
+            .await
             .map_err(|_| IpcError::ChannelClosed)
     }
 
     /// Receive a message from the plugin (plugin → kernel).
     pub async fn recv(&mut self) -> Result<IpcMessage, IpcError> {
-        self.from_plugin_rx.recv().await
+        self.from_plugin_rx
+            .recv()
+            .await
             .ok_or(IpcError::ChannelClosed)
     }
 
-    pub fn plugin_id(&self) -> &str { &self.plugin_id }
+    pub fn plugin_id(&self) -> &str {
+        &self.plugin_id
+    }
 }

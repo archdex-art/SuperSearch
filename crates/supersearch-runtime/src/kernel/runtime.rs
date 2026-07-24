@@ -17,21 +17,21 @@
 //! 6. Enter main scheduler loop.
 
 use std::sync::Arc;
-use tracing::{info, error};
+use tracing::{error, info};
 
-use crate::scheduler::queue::MultiQueue;
-use crate::scheduler::executor::{SchedulerExecutor, SchedulerConfig, NoopFastPathSink};
-use crate::scheduler::supervisor::{Supervisor, SupervisorStrategy, ChildSpec, RestartPolicy};
-use crate::capability::registry::CapabilityRegistry;
+use super::process::ProcessManager;
+use crate::agent::AgentController;
 use crate::capability::gate::CapabilityGate;
 use crate::capability::namespace::Namespace;
+use crate::capability::registry::CapabilityRegistry;
 use crate::capability::token::Permission;
-use crate::journal::writer::{JournalWriter, JournalSender};
+use crate::journal::writer::{JournalSender, JournalWriter};
+use crate::plugin::host::PluginHost;
 use crate::reactive::graph::DependencyGraph;
 use crate::reactive::reconcile::ReconciliationEngine;
-use crate::plugin::host::PluginHost;
-use crate::agent::AgentController;
-use super::process::ProcessManager;
+use crate::scheduler::executor::{NoopFastPathSink, SchedulerConfig, SchedulerExecutor};
+use crate::scheduler::queue::MultiQueue;
+use crate::scheduler::supervisor::{ChildSpec, RestartPolicy, Supervisor, SupervisorStrategy};
 
 /// Configuration for the runtime kernel.
 #[derive(Debug, Clone)]
@@ -118,10 +118,8 @@ impl RuntimeKernel {
         info!("Scheduler and supervisor initialized");
 
         // 3. Event Journal.
-        let (journal_writer, journal_sender) = JournalWriter::new(
-            &config.journal_dir,
-            config.journal_channel_size,
-        );
+        let (journal_writer, journal_sender) =
+            JournalWriter::new(&config.journal_dir, config.journal_channel_size);
         info!(dir = %config.journal_dir, "Journal writer created");
 
         // 4. Reactive graph.
@@ -194,7 +192,9 @@ impl RuntimeKernel {
         info!("Starting runtime kernel main loop");
 
         // Start the journal writer as a background Tokio task.
-        let mut journal_writer = self.journal_writer.take()
+        let mut journal_writer = self
+            .journal_writer
+            .take()
             .expect("Journal writer already taken");
         let journal_handle = tokio::spawn(async move {
             if let Err(e) = journal_writer.run().await {

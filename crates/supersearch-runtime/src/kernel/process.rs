@@ -4,10 +4,10 @@
 //! Spawned processes are supervised by the kernel's process manager,
 //! which monitors their exit status and reports failures.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Instant;
-use serde::{Serialize, Deserialize};
 use tracing::info;
 
 /// Configuration for a managed process.
@@ -126,7 +126,7 @@ impl ProcessManager {
         let process = ManagedProcess {
             id,
             config,
-            pid: None,       // Set after actual spawn.
+            pid: None, // Set after actual spawn.
             state: ProcessState::Created,
             spawned_at: Instant::now(),
             stdout_buffer: Vec::new(),
@@ -147,7 +147,9 @@ impl ProcessManager {
 
     /// Terminate a process by its manager ID.
     pub fn terminate(&mut self, id: u64) -> Result<(), ProcessError> {
-        let process = self.processes.get_mut(&id)
+        let process = self
+            .processes
+            .get_mut(&id)
             .ok_or(ProcessError::NotFound(id))?;
 
         if process.state == ProcessState::Exited || process.state == ProcessState::Terminated {
@@ -167,7 +169,9 @@ impl ProcessManager {
     /// Terminate all processes owned by a specific plugin.
     /// Called during plugin unload.
     pub fn terminate_all_for_plugin(&mut self, plugin_id: &str) -> usize {
-        let ids: Vec<u64> = self.processes.iter()
+        let ids: Vec<u64> = self
+            .processes
+            .iter()
             .filter(|(_, p)| p.config.owner_plugin == plugin_id && p.state == ProcessState::Running)
             .map(|(id, _)| *id)
             .collect();
@@ -180,7 +184,11 @@ impl ProcessManager {
         }
 
         if terminated > 0 {
-            info!(plugin = plugin_id, count = terminated, "Terminated plugin processes");
+            info!(
+                plugin = plugin_id,
+                count = terminated,
+                "Terminated plugin processes"
+            );
         }
         terminated
     }
@@ -199,9 +207,14 @@ impl ProcessManager {
 
     /// Number of active (running) processes.
     pub fn active_count(&self) -> usize {
-        self.processes.values().filter(|p| p.state == ProcessState::Running).count()
+        self.processes
+            .values()
+            .filter(|p| p.state == ProcessState::Running)
+            .count()
     }
 
     /// Total processes ever managed.
-    pub fn total_count(&self) -> usize { self.processes.len() }
+    pub fn total_count(&self) -> usize {
+        self.processes.len()
+    }
 }

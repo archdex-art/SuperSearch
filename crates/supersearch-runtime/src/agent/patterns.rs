@@ -99,7 +99,9 @@ impl PatternEngine {
     pub fn classify(&self, query: &str) -> AgentIntent {
         let q = query.trim();
         if q.is_empty() {
-            return AgentIntent::Unknown { raw_query: String::new() };
+            return AgentIntent::Unknown {
+                raw_query: String::new(),
+            };
         }
 
         let lower = q.to_lowercase();
@@ -119,7 +121,10 @@ impl PatternEngine {
     /// Classify a single (non-compound) query.
     fn classify_single(&self, original: &str, lower: &str) -> AgentIntent {
         // ── URL detection ──
-        if lower.starts_with("http://") || lower.starts_with("https://") || lower.starts_with("www.") {
+        if lower.starts_with("http://")
+            || lower.starts_with("https://")
+            || lower.starts_with("www.")
+        {
             return AgentIntent::OpenUrl {
                 url: if lower.starts_with("www.") {
                     format!("https://{}", original.trim())
@@ -133,7 +138,7 @@ impl PatternEngine {
         if let Some(app) = strip_prefix_any(lower, &["open ", "launch ", "start ", "run "]) {
             let mut app_name = app.trim();
             let mut args = Vec::new();
-            
+
             // Check for trailing modifiers like "in incognito mode"
             if let Some(idx) = app_name.find(" in ") {
                 let modifier = &app_name[idx + 4..];
@@ -157,131 +162,251 @@ impl PatternEngine {
 
             // "open /path/to/file" → file open
             if normalized_app_name.starts_with('/') || normalized_app_name.starts_with("~/") {
-                return AgentIntent::OpenFile { path: extract_entity(original, normalized_app_name) };
+                return AgentIntent::OpenFile {
+                    path: extract_entity(original, normalized_app_name),
+                };
             }
-            return AgentIntent::LaunchApp { app_name: titlecase(normalized_app_name), args };
+            return AgentIntent::LaunchApp {
+                app_name: titlecase(normalized_app_name),
+                args,
+            };
         }
 
         // ── App quit ──
         if let Some(app) = strip_prefix_any(lower, &["quit ", "close ", "kill ", "exit "]) {
-            return AgentIntent::QuitApp { app_name: titlecase(app.trim()) };
+            return AgentIntent::QuitApp {
+                app_name: titlecase(app.trim()),
+            };
         }
 
         // ── App switch ──
-        if let Some(app) = strip_prefix_any(lower, &["switch to ", "focus ", "go to ", "activate "]) {
-            return AgentIntent::SwitchApp { app_name: titlecase(app.trim()) };
+        if let Some(app) = strip_prefix_any(lower, &["switch to ", "focus ", "go to ", "activate "])
+        {
+            return AgentIntent::SwitchApp {
+                app_name: titlecase(app.trim()),
+            };
         }
 
         // ── Web search ──
-        if let Some(query) = strip_prefix_any(lower, &[
-            "google ", "bing ", "duckduckgo ", "search the web for ", "search web for ",
-        ]) {
-            return AgentIntent::WebSearch { query: query.trim().to_string() };
+        if let Some(query) = strip_prefix_any(
+            lower,
+            &[
+                "google ",
+                "bing ",
+                "duckduckgo ",
+                "search the web for ",
+                "search web for ",
+            ],
+        ) {
+            return AgentIntent::WebSearch {
+                query: query.trim().to_string(),
+            };
         }
 
         // ── File search ──
-        if let Some(query) = strip_prefix_any(lower, &[
-            "find ", "locate ", "where is ", "where's ", "look for ", "show me ",
-        ]) {
+        if let Some(query) = strip_prefix_any(
+            lower,
+            &[
+                "find ",
+                "locate ",
+                "where is ",
+                "where's ",
+                "look for ",
+                "show me ",
+            ],
+        ) {
             let query = query.trim();
             if !query.is_empty() {
-                return AgentIntent::FindFiles { query: query.to_string() };
+                return AgentIntent::FindFiles {
+                    query: query.to_string(),
+                };
             }
         }
 
         if let Some(query) = strip_prefix_any(lower, &["search for ", "search "]) {
             let query = query.trim();
             if !query.is_empty() {
-                if query.starts_with("what ") || query.starts_with("how ") || query.starts_with("who ") || query.starts_with("why ") {
-                    return AgentIntent::WebSearch { query: query.to_string() };
+                if query.starts_with("what ")
+                    || query.starts_with("how ")
+                    || query.starts_with("who ")
+                    || query.starts_with("why ")
+                {
+                    return AgentIntent::WebSearch {
+                        query: query.to_string(),
+                    };
                 } else {
-                    return AgentIntent::FindFiles { query: query.to_string() };
+                    return AgentIntent::FindFiles {
+                        query: query.to_string(),
+                    };
                 }
             }
         }
 
         // ── Clipboard ──
-        if matches_any(lower, &[
-            "clipboard", "paste", "what's in clipboard", "show clipboard",
-            "clipboard contents", "read clipboard", "get clipboard",
-        ]) {
+        if matches_any(
+            lower,
+            &[
+                "clipboard",
+                "paste",
+                "what's in clipboard",
+                "show clipboard",
+                "clipboard contents",
+                "read clipboard",
+                "get clipboard",
+            ],
+        ) {
             return AgentIntent::ClipboardRead;
         }
         if let Some(content) = strip_prefix_any(lower, &["copy "]) {
-            return AgentIntent::ClipboardWrite { content: content.trim().to_string() };
+            return AgentIntent::ClipboardWrite {
+                content: content.trim().to_string(),
+            };
         }
 
         // ── Running apps ──
-        if matches_any(lower, &[
-            "what's running", "whats running", "running apps", "show running",
-            "list apps", "active apps", "list running", "running processes",
-            "what is running", "show apps",
-        ]) {
+        if matches_any(
+            lower,
+            &[
+                "what's running",
+                "whats running",
+                "running apps",
+                "show running",
+                "list apps",
+                "active apps",
+                "list running",
+                "running processes",
+                "what is running",
+                "show apps",
+            ],
+        ) {
             return AgentIntent::ListRunningApps;
         }
 
         // ── System info ──
-        if matches_any(lower, &["disk space", "storage", "disk usage", "how much space"]) {
-            return AgentIntent::SystemInfo { kind: InfoKind::DiskSpace };
+        if matches_any(
+            lower,
+            &["disk space", "storage", "disk usage", "how much space"],
+        ) {
+            return AgentIntent::SystemInfo {
+                kind: InfoKind::DiskSpace,
+            };
         }
         if matches_any(lower, &["battery", "battery level", "charge", "power"]) {
-            return AgentIntent::SystemInfo { kind: InfoKind::Battery };
+            return AgentIntent::SystemInfo {
+                kind: InfoKind::Battery,
+            };
         }
         if matches_any(lower, &["memory", "ram", "memory usage"]) {
-            return AgentIntent::SystemInfo { kind: InfoKind::Memory };
+            return AgentIntent::SystemInfo {
+                kind: InfoKind::Memory,
+            };
         }
         if matches_any(lower, &["cpu", "processor", "cpu usage"]) {
-            return AgentIntent::SystemInfo { kind: InfoKind::Cpu };
+            return AgentIntent::SystemInfo {
+                kind: InfoKind::Cpu,
+            };
         }
         if matches_any(lower, &["uptime", "how long", "system uptime"]) {
-            return AgentIntent::SystemInfo { kind: InfoKind::Uptime };
+            return AgentIntent::SystemInfo {
+                kind: InfoKind::Uptime,
+            };
         }
-        if matches_any(lower, &[
-            "system info", "system status", "about this mac", "system information",
-        ]) {
-            return AgentIntent::SystemInfo { kind: InfoKind::General };
+        if matches_any(
+            lower,
+            &[
+                "system info",
+                "system status",
+                "about this mac",
+                "system information",
+            ],
+        ) {
+            return AgentIntent::SystemInfo {
+                kind: InfoKind::General,
+            };
         }
 
         // ── System commands ──
         if matches_any(lower, &["lock", "lock screen", "lock my mac"]) {
-            return AgentIntent::SystemCommand { command: SystemCommand::LockScreen };
+            return AgentIntent::SystemCommand {
+                command: SystemCommand::LockScreen,
+            };
         }
         if matches_any(lower, &["sleep", "put to sleep"]) {
-            return AgentIntent::SystemCommand { command: SystemCommand::Sleep };
+            return AgentIntent::SystemCommand {
+                command: SystemCommand::Sleep,
+            };
         }
-        if matches_any(lower, &["do not disturb", "dnd", "focus mode", "silence notifications"]) {
-            return AgentIntent::SystemCommand { command: SystemCommand::DoNotDisturb };
+        if matches_any(
+            lower,
+            &[
+                "do not disturb",
+                "dnd",
+                "focus mode",
+                "silence notifications",
+            ],
+        ) {
+            return AgentIntent::SystemCommand {
+                command: SystemCommand::DoNotDisturb,
+            };
         }
         if matches_any(lower, &["volume up", "louder", "increase volume"]) {
-            return AgentIntent::SystemCommand { command: SystemCommand::VolumeUp };
+            return AgentIntent::SystemCommand {
+                command: SystemCommand::VolumeUp,
+            };
         }
         if matches_any(lower, &["volume down", "quieter", "decrease volume"]) {
-            return AgentIntent::SystemCommand { command: SystemCommand::VolumeDown };
+            return AgentIntent::SystemCommand {
+                command: SystemCommand::VolumeDown,
+            };
         }
         if matches_any(lower, &["mute", "volume mute", "silence"]) {
-            return AgentIntent::SystemCommand { command: SystemCommand::VolumeMute };
+            return AgentIntent::SystemCommand {
+                command: SystemCommand::VolumeMute,
+            };
         }
-        if matches_any(lower, &["screenshot", "screen capture", "capture screen", "take screenshot"]) {
-            return AgentIntent::SystemCommand { command: SystemCommand::Screenshot };
+        if matches_any(
+            lower,
+            &[
+                "screenshot",
+                "screen capture",
+                "capture screen",
+                "take screenshot",
+            ],
+        ) {
+            return AgentIntent::SystemCommand {
+                command: SystemCommand::Screenshot,
+            };
         }
         if matches_any(lower, &["empty trash", "clear trash", "delete trash"]) {
-            return AgentIntent::SystemCommand { command: SystemCommand::EmptyTrash };
+            return AgentIntent::SystemCommand {
+                command: SystemCommand::EmptyTrash,
+            };
         }
         if matches_any(lower, &["show desktop", "desktop", "minimize all"]) {
-            return AgentIntent::SystemCommand { command: SystemCommand::ShowDesktop };
+            return AgentIntent::SystemCommand {
+                command: SystemCommand::ShowDesktop,
+            };
         }
         if matches_any(lower, &["dark mode", "toggle dark mode", "switch theme"]) {
-            return AgentIntent::SystemCommand { command: SystemCommand::ToggleDarkMode };
+            return AgentIntent::SystemCommand {
+                command: SystemCommand::ToggleDarkMode,
+            };
         }
         if matches_any(lower, &["brightness up", "brighter"]) {
-            return AgentIntent::SystemCommand { command: SystemCommand::BrightnessUp };
+            return AgentIntent::SystemCommand {
+                command: SystemCommand::BrightnessUp,
+            };
         }
         if matches_any(lower, &["brightness down", "dimmer"]) {
-            return AgentIntent::SystemCommand { command: SystemCommand::BrightnessDown };
+            return AgentIntent::SystemCommand {
+                command: SystemCommand::BrightnessDown,
+            };
         }
 
         // ── Fallback: treat as search ──
-        AgentIntent::Unknown { raw_query: original.to_string() }
+        AgentIntent::Unknown {
+            raw_query: original.to_string(),
+        }
     }
 
     /// Attempt to split a compound query into multiple intents.
@@ -307,7 +432,8 @@ impl PatternEngine {
                         })
                         .collect();
 
-                    let classified_count = intents.iter()
+                    let classified_count = intents
+                        .iter()
                         .filter(|i| !matches!(i, AgentIntent::Unknown { .. }))
                         .count();
 
@@ -316,19 +442,30 @@ impl PatternEngine {
                         for i in 0..intents.len().saturating_sub(1) {
                             let next_intent = intents[i + 1].clone();
                             if let AgentIntent::LaunchApp { app_name, args } = &mut intents[i] {
-                                let is_browser = app_name.contains("Chrome") || app_name.contains("Brave") || app_name.contains("Safari") || app_name.contains("Edge") || app_name.contains("Firefox");
+                                let is_browser = app_name.contains("Chrome")
+                                    || app_name.contains("Brave")
+                                    || app_name.contains("Safari")
+                                    || app_name.contains("Edge")
+                                    || app_name.contains("Firefox");
                                 if is_browser {
-                                    if let AgentIntent::WebSearch { query } | AgentIntent::FindFiles { query } = &next_intent {
-                                        let url = format!("https://google.com/search?q={}", percent_encode(query));
+                                    if let AgentIntent::WebSearch { query }
+                                    | AgentIntent::FindFiles { query } = &next_intent
+                                    {
+                                        let url = format!(
+                                            "https://google.com/search?q={}",
+                                            percent_encode(query)
+                                        );
                                         args.push(url);
-                                        intents[i + 1] = AgentIntent::Unknown { raw_query: "".to_string() };
+                                        intents[i + 1] = AgentIntent::Unknown {
+                                            raw_query: "".to_string(),
+                                        };
                                     }
                                 }
                             }
                         }
-                        
+
                         intents.retain(|i| !matches!(i, AgentIntent::Unknown { raw_query } if raw_query.is_empty()));
-                        
+
                         if intents.len() == 1 {
                             return Some(intents.into_iter().next().unwrap());
                         }
@@ -424,8 +561,14 @@ mod tests {
     #[test]
     fn test_system_command() {
         let engine = PatternEngine::new();
-        assert!(matches!(engine.classify("lock screen"), AgentIntent::SystemCommand { .. }));
-        assert!(matches!(engine.classify("screenshot"), AgentIntent::SystemCommand { .. }));
+        assert!(matches!(
+            engine.classify("lock screen"),
+            AgentIntent::SystemCommand { .. }
+        ));
+        assert!(matches!(
+            engine.classify("screenshot"),
+            AgentIntent::SystemCommand { .. }
+        ));
     }
 
     #[test]
@@ -464,11 +607,23 @@ mod tests {
         match engine.classify("open chrome and search for cats & dogs 50%") {
             AgentIntent::LaunchApp { args, .. } => {
                 let url = args.last().expect("expected a folded search URL arg");
-                assert!(url.contains("%26"), "'&' must be percent-encoded, got {url}");
-                assert!(url.contains("%25"), "'%' must be percent-encoded, got {url}");
-                assert!(!url.contains(' '), "URL must not contain a raw space, got {url}");
+                assert!(
+                    url.contains("%26"),
+                    "'&' must be percent-encoded, got {url}"
+                );
+                assert!(
+                    url.contains("%25"),
+                    "'%' must be percent-encoded, got {url}"
+                );
+                assert!(
+                    !url.contains(' '),
+                    "URL must not contain a raw space, got {url}"
+                );
             }
-            other => panic!("Expected LaunchApp with a folded search URL, got {:?}", other),
+            other => panic!(
+                "Expected LaunchApp with a folded search URL, got {:?}",
+                other
+            ),
         }
     }
 }

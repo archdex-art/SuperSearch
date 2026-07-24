@@ -14,7 +14,10 @@
 //! [`default_backend`](super::default_backend) — nothing in the executor, the
 //! capability gate, or the journal changes. Compiled everywhere but only
 //! selected off macOS/Linux, hence the module-level `allow`.
-#![cfg_attr(any(target_os = "macos", target_os = "linux", target_os = "windows"), allow(dead_code))]
+#![cfg_attr(
+    any(target_os = "macos", target_os = "linux", target_os = "windows"),
+    allow(dead_code)
+)]
 
 use std::time::Duration;
 

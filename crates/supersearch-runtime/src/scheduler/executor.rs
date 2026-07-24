@@ -12,20 +12,17 @@
 //! The executor loop contains ZERO references to token counts, inference
 //! budgets, or API quotas. It schedules purely on time and priority.
 
-
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll, Wake, Waker};
 use std::time::{Duration, Instant};
 
 use tokio::sync::Notify;
-use tracing::{debug, error, info, trace, warn, instrument};
-
+use tracing::{debug, error, info, instrument, trace, warn};
 
 use super::queue::MultiQueue;
 use super::supervisor::Supervisor;
 use super::task::TaskHandle;
-
 
 /// Statistics emitted per scheduler tick for observability.
 /// Kept minimal to avoid allocation in the hot path.
@@ -201,9 +198,8 @@ impl SchedulerExecutor {
             // a long-running `agent_query`) fell into the `yield_now` arm,
             // which returns near-instantly — pinning a CPU core for the
             // entire duration of any in-flight agent action.
-            let made_progress = stats.tasks_completed > 0
-                || stats.tasks_cancelled > 0
-                || stats.tasks_promoted > 0;
+            let made_progress =
+                stats.tasks_completed > 0 || stats.tasks_cancelled > 0 || stats.tasks_promoted > 0;
 
             if !made_progress {
                 tokio::select! {
@@ -229,7 +225,11 @@ impl SchedulerExecutor {
     /// Process a single dequeued task. Returns `Some(task)` when the task
     /// polled `Pending` and must be re-enqueued by the caller (deferred so it
     /// isn't immediately visible to this tick's remaining `dequeue()` calls).
-    async fn process_task(&mut self, mut task: TaskHandle, stats: &mut TickStats) -> Option<TaskHandle> {
+    async fn process_task(
+        &mut self,
+        mut task: TaskHandle,
+        stats: &mut TickStats,
+    ) -> Option<TaskHandle> {
         let desc = &task.descriptor;
 
         // 1. Cancellation check (< 1ns).
@@ -251,9 +251,11 @@ impl SchedulerExecutor {
             // Apply fast-path update to render pipeline immediately.
             // This bypasses the reactive dependency graph for the initial
             // frame, achieving < 4ms input-to-pixel latency.
-            self.fast_path_sink.apply_fast_path(desc.id, desc.provenance.label);
+            self.fast_path_sink
+                .apply_fast_path(desc.id, desc.provenance.label);
             // Spawn async reconciliation at lower priority.
-            self.fast_path_sink.spawn_reconciliation(desc.id, desc.provenance.label);
+            self.fast_path_sink
+                .spawn_reconciliation(desc.id, desc.provenance.label);
         }
 
         // 4. Deadline check (~25ns).
@@ -355,7 +357,7 @@ mod tests {
     use super::*;
     use crate::scheduler::queue::MultiQueue;
     use crate::scheduler::supervisor::Supervisor;
-    use crate::scheduler::{SupervisorStrategy, PriorityClass};
+    use crate::scheduler::{PriorityClass, SupervisorStrategy};
 
     #[tokio::test]
     async fn scheduler_completes_single_task() {
@@ -364,15 +366,14 @@ mod tests {
         let supervisor = Supervisor::new("test", SupervisorStrategy::OneForOne);
         let sink = Arc::new(NoopFastPathSink);
 
-        let mut executor = SchedulerExecutor::new(
-            queue.clone(), config, supervisor, sink,
-        );
+        let mut executor = SchedulerExecutor::new(queue.clone(), config, supervisor, sink);
 
         // Enqueue a trivial task.
         let completed = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let completed_clone = completed.clone();
 
-        let handle = queue.builder(PriorityClass::Interactive)
+        let handle = queue
+            .builder(PriorityClass::Interactive)
             .origin("test")
             .label("trivial_task")
             .spawn(async move {
@@ -407,7 +408,10 @@ mod tests {
         let queue = Arc::new(MultiQueue::new());
         let supervisor = Supervisor::new("test", SupervisorStrategy::OneForOne);
         let mut executor = SchedulerExecutor::new(
-            queue.clone(), SchedulerConfig::default(), supervisor, Arc::new(NoopFastPathSink),
+            queue.clone(),
+            SchedulerConfig::default(),
+            supervisor,
+            Arc::new(NoopFastPathSink),
         );
 
         let (tx, rx) = tokio::sync::oneshot::channel::<u32>();
@@ -466,7 +470,10 @@ mod tests {
         let queue = Arc::new(MultiQueue::new());
         let supervisor = Supervisor::new("test", SupervisorStrategy::OneForOne);
         let mut executor = SchedulerExecutor::new(
-            queue.clone(), SchedulerConfig::default(), supervisor, Arc::new(NoopFastPathSink),
+            queue.clone(),
+            SchedulerConfig::default(),
+            supervisor,
+            Arc::new(NoopFastPathSink),
         );
 
         let polls = Arc::new(AtomicU32::new(0));
@@ -498,6 +505,9 @@ mod tests {
         // *tick* (yield_now returns near-instantly, no sleep at all) — two
         // orders of magnitude more — so the threshold below cleanly
         // distinguishes "idle at 1ms granularity" from "pinning a core".
-        assert!(count < 500, "expected periodic (~1/ms) polling, got {count} in 300ms — scheduler is busy-spinning");
+        assert!(
+            count < 500,
+            "expected periodic (~1/ms) polling, got {count} in 300ms — scheduler is busy-spinning"
+        );
     }
 }

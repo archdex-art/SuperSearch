@@ -5,8 +5,8 @@
 
 use std::any::Any;
 
-use super::node::{NodeId, ReactiveNode};
 use super::graph::DependencyGraph;
+use super::node::{NodeId, ReactiveNode};
 
 /// A reactive signal — mutable source state.
 ///
@@ -37,17 +37,14 @@ impl Signal {
 
     /// Get the current value of this signal.
     pub fn get<T: Any + Send + Sync + Clone>(&self, graph: &DependencyGraph) -> Option<T> {
-        graph.get_node(&self.id)
+        graph
+            .get_node(&self.id)
             .and_then(|node| node.get::<T>().cloned())
     }
 
     /// Set the signal value and trigger reactive propagation.
     /// Returns the topological evaluation order of affected nodes.
-    pub fn set<T: Any + Send + Sync>(
-        &self,
-        graph: &mut DependencyGraph,
-        value: T,
-    ) -> Vec<NodeId> {
+    pub fn set<T: Any + Send + Sync>(&self, graph: &mut DependencyGraph, value: T) -> Vec<NodeId> {
         if let Some(node) = graph.get_node_mut(&self.id) {
             node.set(value);
         }
@@ -65,11 +62,7 @@ pub struct Computed {
 
 impl Computed {
     /// Create a new computed node and declare its dependencies.
-    pub fn new(
-        graph: &mut DependencyGraph,
-        label: &'static str,
-        dependencies: &[NodeId],
-    ) -> Self {
+    pub fn new(graph: &mut DependencyGraph, label: &'static str, dependencies: &[NodeId]) -> Self {
         let node = ReactiveNode::computed(label);
         let id = graph.add_node(node);
 
@@ -82,7 +75,8 @@ impl Computed {
 
     /// Get the cached value.
     pub fn get<T: Any + Send + Sync + Clone>(&self, graph: &DependencyGraph) -> Option<T> {
-        graph.get_node(&self.id)
+        graph
+            .get_node(&self.id)
             .and_then(|node| node.get::<T>().cloned())
     }
 
@@ -104,11 +98,7 @@ pub struct Effect {
 
 impl Effect {
     /// Create a new effect and declare its dependencies.
-    pub fn new(
-        graph: &mut DependencyGraph,
-        label: &'static str,
-        dependencies: &[NodeId],
-    ) -> Self {
+    pub fn new(graph: &mut DependencyGraph, label: &'static str, dependencies: &[NodeId]) -> Self {
         let node = ReactiveNode::effect(label);
         let id = graph.add_node(node);
 

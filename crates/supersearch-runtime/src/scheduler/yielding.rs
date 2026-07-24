@@ -4,8 +4,8 @@
 //! this module provides a yield loop that checks elapsed wall-clock time against
 //! the task's deadline and poll count against its budget.
 
-use std::time::Instant;
 use super::task::TaskDescriptor;
+use std::time::Instant;
 
 /// Outcome of a yield check — tells the caller whether to continue, yield, or abort.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -106,10 +106,7 @@ impl YieldContext {
 ///     }
 /// }).await;
 /// ```
-pub async fn cooperative_yield_loop<T, F, Fut>(
-    desc: &TaskDescriptor,
-    mut work: F,
-) -> Option<Vec<T>>
+pub async fn cooperative_yield_loop<T, F, Fut>(desc: &TaskDescriptor, mut work: F) -> Option<Vec<T>>
 where
     F: FnMut(usize) -> Fut,
     Fut: std::future::Future<Output = Option<T>>,
@@ -169,7 +166,7 @@ mod tests {
         assert_eq!(ctx.check(), YieldDecision::Continue); // 2 remaining
         assert_eq!(ctx.check(), YieldDecision::Continue); // 1 remaining
         assert_eq!(ctx.check(), YieldDecision::Continue); // 0 remaining
-        assert_eq!(ctx.check(), YieldDecision::Yield);    // exhausted
+        assert_eq!(ctx.check(), YieldDecision::Yield); // exhausted
     }
 
     #[test]

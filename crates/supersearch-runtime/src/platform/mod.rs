@@ -33,10 +33,10 @@ pub(crate) mod exec;
 // Exactly one is *selected* per target by `default_backend`; on the platforms
 // where a backend is the inactive alternative it carries a targeted
 // `allow(dead_code)`.
-mod macos;
 mod linux;
-mod windows;
+mod macos;
 mod unsupported;
+mod windows;
 
 /// Result of executing a single OS automation primitive.
 ///
@@ -61,7 +61,13 @@ pub struct StepResult {
 /// source — pass it as a spawned-process argument instead.
 pub trait PlatformBackend: Send + Sync {
     /// Launch an application, optionally forwarding `args` to a fresh instance.
-    fn launch_app(&self, app_name: &str, args: &[String], label: &str, timeout: Duration) -> StepResult;
+    fn launch_app(
+        &self,
+        app_name: &str,
+        args: &[String],
+        label: &str,
+        timeout: Duration,
+    ) -> StepResult;
     /// Open a filesystem path with its default handler.
     fn open_path(&self, path: &str, label: &str, timeout: Duration) -> StepResult;
     /// Open a URL with the default browser/handler.
@@ -80,7 +86,13 @@ pub trait PlatformBackend: Send + Sync {
     fn switch_app(&self, app_name: &str, label: &str, timeout: Duration) -> StepResult;
     /// Run a trusted, planner-generated constant script. `capture` returns its
     /// stdout as the result output. **Never** pass user-derived input here.
-    fn run_trusted_script(&self, script: &str, label: &str, capture: bool, timeout: Duration) -> StepResult;
+    fn run_trusted_script(
+        &self,
+        script: &str,
+        label: &str,
+        capture: bool,
+        timeout: Duration,
+    ) -> StepResult;
 }
 
 /// Select the platform backend for the current compile target.

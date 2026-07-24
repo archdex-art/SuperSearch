@@ -9,9 +9,9 @@ use std::sync::Arc;
 use std::time::Instant;
 use tracing::{debug, info, warn};
 
-use super::manifest::PluginManifest;
-use super::sandbox::{WasmSandbox, SandboxConfig, SandboxError};
 use super::ipc::{IpcChannel, KernelIpcEndpoint};
+use super::manifest::PluginManifest;
+use super::sandbox::{SandboxConfig, SandboxError, WasmSandbox};
 use crate::capability::gate::CapabilityGate;
 use crate::capability::namespace::Namespace;
 use crate::capability::registry::CapabilityRegistry;
@@ -57,7 +57,10 @@ pub enum PluginHostError {
     #[error("Sandbox error: {0}")]
     SandboxError(#[from] SandboxError),
     #[error("Plugin '{plugin}' requires permission {permission:?} which was denied")]
-    PermissionDenied { plugin: String, permission: Permission },
+    PermissionDenied {
+        plugin: String,
+        permission: Permission,
+    },
     #[error("Plugin '{0}' is in state {1:?}, expected {2:?}")]
     InvalidState(String, PluginState, PluginState),
 }
@@ -77,10 +80,7 @@ pub struct PluginHost {
 }
 
 impl PluginHost {
-    pub fn new(
-        registry: Arc<CapabilityRegistry>,
-        gate: Arc<CapabilityGate>,
-    ) -> Self {
+    pub fn new(registry: Arc<CapabilityRegistry>, gate: Arc<CapabilityGate>) -> Self {
         Self {
             plugins: HashMap::new(),
             registry,
@@ -155,12 +155,16 @@ impl PluginHost {
 
     /// Start a loaded plugin (transition to Running state).
     pub fn start(&mut self, plugin_id: &str) -> Result<(), PluginHostError> {
-        let plugin = self.plugins.get_mut(plugin_id)
+        let plugin = self
+            .plugins
+            .get_mut(plugin_id)
             .ok_or_else(|| PluginHostError::NotFound(plugin_id.into()))?;
 
         if plugin.state != PluginState::Loaded && plugin.state != PluginState::Suspended {
             return Err(PluginHostError::InvalidState(
-                plugin_id.into(), plugin.state, PluginState::Loaded,
+                plugin_id.into(),
+                plugin.state,
+                PluginState::Loaded,
             ));
         }
 
@@ -171,12 +175,16 @@ impl PluginHost {
 
     /// Suspend a running plugin (preserve state, yield time slice).
     pub fn suspend(&mut self, plugin_id: &str) -> Result<(), PluginHostError> {
-        let plugin = self.plugins.get_mut(plugin_id)
+        let plugin = self
+            .plugins
+            .get_mut(plugin_id)
             .ok_or_else(|| PluginHostError::NotFound(plugin_id.into()))?;
 
         if plugin.state != PluginState::Running {
             return Err(PluginHostError::InvalidState(
-                plugin_id.into(), plugin.state, PluginState::Running,
+                plugin_id.into(),
+                plugin.state,
+                PluginState::Running,
             ));
         }
 
@@ -187,7 +195,9 @@ impl PluginHost {
 
     /// Unload a plugin: revoke capabilities, teardown sandbox, remove from host.
     pub fn unload(&mut self, plugin_id: &str) -> Result<(), PluginHostError> {
-        let mut plugin = self.plugins.remove(plugin_id)
+        let mut plugin = self
+            .plugins
+            .remove(plugin_id)
             .ok_or_else(|| PluginHostError::NotFound(plugin_id.into()))?;
 
         // Revoke all capabilities.
@@ -234,5 +244,7 @@ impl PluginHost {
     }
 
     /// Number of loaded plugins.
-    pub fn plugin_count(&self) -> usize { self.plugins.len() }
+    pub fn plugin_count(&self) -> usize {
+        self.plugins.len()
+    }
 }
