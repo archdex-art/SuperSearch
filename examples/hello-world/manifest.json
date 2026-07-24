@@ -1,0 +1,10 @@
+{
+  "id": "hello-world",
+  "name": "Hello World",
+  "version": "1.0.0",
+  "kind": "js",
+  "entrypoint": "dist/bundle.js",
+  "commands": [
+    { "name": "say-hello", "title": "Say Hello", "mode": "view" }
+  ]
+}

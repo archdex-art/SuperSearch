@@ -225,6 +225,9 @@ impl CapabilityGate {
         namespace: &Namespace,
         permission: Permission,
     ) -> bool {
-        matches!(self.check(token, namespace, permission), GateDecision::Allowed { .. })
+        matches!(
+            self.check(token, namespace, permission),
+            GateDecision::Allowed { .. }
+        )
     }
 }

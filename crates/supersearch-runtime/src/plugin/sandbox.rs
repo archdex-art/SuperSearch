@@ -5,7 +5,6 @@
 //! - Fuel metering (instruction counting for preemption).
 //! - No direct WASI access — all I/O goes through capability-gated host functions.
 
-
 use tracing::{debug, info};
 
 use super::manifest::ResourceLimits;
@@ -123,10 +122,7 @@ impl WasmSandbox {
     ///
     /// The skeleton below establishes the interface; Wasmtime integration
     /// requires the actual WASM bytes and host function bindings.
-    pub fn compile_and_instantiate(
-        &mut self,
-        _wasm_bytes: &[u8],
-    ) -> Result<(), SandboxError> {
+    pub fn compile_and_instantiate(&mut self, _wasm_bytes: &[u8]) -> Result<(), SandboxError> {
         // Validate WASM binary size against memory limits.
         if _wasm_bytes.len() > self.config.limits.max_memory_bytes {
             return Err(SandboxError::MemoryLimitExceeded {
@@ -158,7 +154,7 @@ impl WasmSandbox {
     ) -> Result<ExecutionResult, SandboxError> {
         if !self.initialized {
             return Err(SandboxError::InstantiationFailed(
-                "Sandbox not initialized".into()
+                "Sandbox not initialized".into(),
             ));
         }
 
@@ -192,11 +188,15 @@ impl WasmSandbox {
 
     /// Check remaining fuel.
     #[inline]
-    pub fn fuel_remaining(&self) -> u64 { self.fuel_remaining }
+    pub fn fuel_remaining(&self) -> u64 {
+        self.fuel_remaining
+    }
 
     /// Check if the sandbox is initialized.
     #[inline]
-    pub fn is_initialized(&self) -> bool { self.initialized }
+    pub fn is_initialized(&self) -> bool {
+        self.initialized
+    }
 
     /// Teardown the sandbox, releasing all resources.
     pub fn teardown(&mut self) {
@@ -210,5 +210,7 @@ impl WasmSandbox {
         self.current_memory_bytes = 0;
     }
 
-    pub fn plugin_id(&self) -> &str { &self.plugin_id }
+    pub fn plugin_id(&self) -> &str {
+        &self.plugin_id
+    }
 }

@@ -13,12 +13,12 @@
 //! Signal values are designed to be CRDT-compatible: merge operations must be
 //! commutative, associative, and idempotent for local-first sync.
 
-pub mod node;
 pub mod graph;
-pub mod signal;
+pub mod node;
 pub mod reconcile;
+pub mod signal;
 
-pub use node::{NodeId, ReactiveNode, NodeKind};
 pub use graph::DependencyGraph;
-pub use signal::{Signal, Computed, Effect};
+pub use node::{NodeId, NodeKind, ReactiveNode};
 pub use reconcile::ReconciliationEngine;
+pub use signal::{Computed, Effect, Signal};

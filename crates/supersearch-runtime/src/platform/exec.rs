@@ -40,7 +40,12 @@ pub(crate) fn run_argv_output(
     label: &str,
     timeout: Duration,
 ) -> StepResult {
-    debug!(program, ?args, label, "Executing argv command (capturing output)");
+    debug!(
+        program,
+        ?args,
+        label,
+        "Executing argv command (capturing output)"
+    );
     let mut cmd = Command::new(program);
     cmd.args(args);
     run_command(cmd, None, label, true, timeout)
@@ -72,7 +77,10 @@ pub(crate) fn run_shell(cmd: &str, label: &str, timeout: Duration) -> StepResult
 
 /// Run a trusted, constant shell command and capture its stdout.
 pub(crate) fn run_shell_with_output(cmd: &str, label: &str, timeout: Duration) -> StepResult {
-    debug!(cmd, label, "Executing trusted shell command (capturing output)");
+    debug!(
+        cmd,
+        label, "Executing trusted shell command (capturing output)"
+    );
     let mut command = Command::new("sh");
     command.arg("-c").arg(cmd);
     run_command(command, None, label, true, timeout)
@@ -89,9 +97,13 @@ pub(crate) fn run_command(
     capture: bool,
     timeout: Duration,
 ) -> StepResult {
-    cmd.stdin(if input.is_some() { Stdio::piped() } else { Stdio::null() })
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    cmd.stdin(if input.is_some() {
+        Stdio::piped()
+    } else {
+        Stdio::null()
+    })
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped());
 
     let mut child = match cmd.spawn() {
         Ok(c) => c,
@@ -128,7 +140,11 @@ pub(crate) fn run_command(
                 let stdout = join_reader(stdout_reader);
                 let stderr = join_reader(stderr_reader);
                 return finish(
-                    Ok(std::process::Output { status, stdout, stderr }),
+                    Ok(std::process::Output {
+                        status,
+                        stdout,
+                        stderr,
+                    }),
                     label,
                     capture,
                 );
@@ -137,7 +153,11 @@ pub(crate) fn run_command(
                 if Instant::now() >= deadline {
                     let _ = child.kill();
                     let _ = child.wait();
-                    error!(label, timeout_ms = timeout.as_millis() as u64, "Action timed out — killed");
+                    error!(
+                        label,
+                        timeout_ms = timeout.as_millis() as u64,
+                        "Action timed out — killed"
+                    );
                     return StepResult {
                         node_id: 0,
                         label: label.to_string(),
@@ -171,11 +191,7 @@ fn join_reader(handle: Option<JoinHandle<Vec<u8>>>) -> Vec<u8> {
 }
 
 /// Normalize a completed `Command::output()` into a [`StepResult`].
-fn finish(
-    output: std::io::Result<std::process::Output>,
-    label: &str,
-    capture: bool,
-) -> StepResult {
+fn finish(output: std::io::Result<std::process::Output>, label: &str, capture: bool) -> StepResult {
     match output {
         Ok(output) => {
             let success = output.status.success();
@@ -240,7 +256,10 @@ mod tests {
         let result = run_command(cmd, None, "sleep", false, Duration::from_millis(200));
         assert!(!result.success);
         assert!(result.error.unwrap_or_default().contains("Timed out"));
-        assert!(start.elapsed() < Duration::from_secs(5), "did not honor the deadline");
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "did not honor the deadline"
+        );
     }
 
     #[test]
@@ -264,7 +283,15 @@ mod tests {
             c
         };
         let result = run_command(cmd, None, "big-output", true, Duration::from_secs(5));
-        assert!(result.success, "process should complete well within the deadline: {:?}", result.error);
-        assert!(result.output.len() >= 100_000, "expected large output to be captured, got {} bytes", result.output.len());
+        assert!(
+            result.success,
+            "process should complete well within the deadline: {:?}",
+            result.error
+        );
+        assert!(
+            result.output.len() >= 100_000,
+            "expected large output to be captured, got {} bytes",
+            result.output.len()
+        );
     }
 }

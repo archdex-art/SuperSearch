@@ -37,6 +37,33 @@ pub struct ExtensionManifest {
     /// Capabilities requested, each with a justification for consent.
     #[serde(default)]
     pub permissions: Vec<PermissionRequest>,
+    /// The list of commands exposed by this extension (Phase 13 AI Tools).
+    #[serde(default)]
+    pub commands: Vec<ExtensionCommand>,
+}
+
+/// A specific command exposed by an extension.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtensionCommand {
+    /// The unique name of the command.
+    pub name: String,
+    /// Human-readable title.
+    pub title: String,
+    /// Execution mode: "view" (opens UI) or "no-view" (headless, can be run by AI).
+    pub mode: String,
+    /// Optional arguments defining the JSON schema for this command.
+    #[serde(default)]
+    pub arguments: Vec<CommandArgument>,
+}
+
+/// An argument expected by a command, mapped to an MCP tool parameter.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommandArgument {
+    pub name: String,
+    pub r#type: String, // e.g., "string", "number", "boolean"
+    pub description: Option<String>,
+    #[serde(default)]
+    pub required: bool,
 }
 
 /// How an extension is executed.
@@ -45,8 +72,10 @@ pub struct ExtensionManifest {
 pub enum ExtensionKind {
     /// A native script (shell/python/node) run as a subprocess. v1.
     Script,
-    /// A sandboxed WebAssembly module. v2 (not yet executed).
+    /// A sandboxed WebAssembly module. v2 (legacy exploration).
     Wasm,
+    /// A sandboxed V8 JavaScript/TypeScript module. v3 (Current Architecture).
+    Js,
 }
 
 /// A single requested capability plus why it is needed.
@@ -75,6 +104,11 @@ impl ExtensionManifest {
         toml::from_str(text)
     }
 
+    /// Parse a manifest from JSON text.
+    pub fn from_json(text: &str) -> Result<Self, serde_json::Error> {
+        serde_json::from_str(text)
+    }
+
     /// Reject malformed or unsafe manifests before they are trusted.
     ///
     /// The id must be a plain slug (it becomes a directory name) and the
@@ -101,10 +135,7 @@ impl ExtensionManifest {
             return Err(ManifestError::UnsafeId(self.id.clone()));
         }
         let ep = std::path::Path::new(&self.entrypoint);
-        if ep.is_absolute()
-            || self.entrypoint.contains("..")
-            || ep.components().count() == 0
-        {
+        if ep.is_absolute() || self.entrypoint.contains("..") || ep.components().count() == 0 {
             return Err(ManifestError::UnsafeEntrypoint(self.entrypoint.clone()));
         }
         Ok(())

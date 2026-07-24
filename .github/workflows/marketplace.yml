@@ -1,0 +1,65 @@
+name: Marketplace Publishing Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    paths:
+      - 'extensions/**'
+
+jobs:
+  security-audit:
+    name: Dependency & Capability Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: NPM Audit (OSV)
+        run: npm audit --audit-level=high
+      - name: Capability Diff Check
+        run: |
+          # Custom script comparing requested capabilities to previously approved ones
+          # Fails the PR if high-privilege capabilities are suddenly requested without review.
+          npx @supersearch/cli lint-capabilities
+
+  build:
+    name: Build & Lint
+    needs: security-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: npm install
+      - name: Build Extension (esbuild)
+        run: npx @supersearch/cli build
+      - name: Enforce Size Quota
+        run: |
+          SIZE=$(stat -c%s "dist/bundle.js")
+          if [ $SIZE -gt 5242880 ]; then
+            echo "❌ Bundle exceeds 5MB limit ($SIZE bytes)"
+            exit 1
+          fi
+
+  sign-and-publish:
+    name: Sign & Push to Edge CDN
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sign Bundle
+        env:
+          PRIVATE_KEY: ${{ secrets.MARKETPLACE_PRIVATE_KEY }}
+        run: |
+          # Uses the private Ed25519 key to generate a detached signature (.sig)
+          npx @supersearch/cli sign --key "$PRIVATE_KEY" dist/bundle.js
+      - name: Upload to Edge CDN (Cloudflare R2 / S3)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          # Push the bundle, the signature, and update the global extensions.json
+          npx @supersearch/cli publish-to-cdn

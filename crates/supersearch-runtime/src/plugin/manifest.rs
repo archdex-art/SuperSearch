@@ -5,8 +5,8 @@
 //! The kernel reads the manifest before loading to determine what capabilities
 //! to inject and whether to approve the plugin.
 
-use serde::{Serialize, Deserialize};
 use crate::capability::token::Permission;
+use serde::{Deserialize, Serialize};
 
 /// Semantic version for plugins.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,9 +56,9 @@ impl Default for ResourceLimits {
     fn default() -> Self {
         Self {
             max_memory_bytes: 16 * 1024 * 1024, // 16 MiB
-            max_fuel: 1_000_000_000,              // ~1 billion instructions
+            max_fuel: 1_000_000_000,            // ~1 billion instructions
             max_concurrent_tasks: 16,
-            max_ipc_message_bytes: 1024 * 1024,   // 1 MiB
+            max_ipc_message_bytes: 1024 * 1024, // 1 MiB
             priority_ceiling: crate::scheduler::priority::PriorityClass::UserBlocking,
         }
     }
@@ -110,19 +110,20 @@ impl PluginManifest {
         for req in &self.permissions {
             if !req.optional
                 && matches!(req.permission, Permission::TaskSpawnCritical)
-                    && self.resource_limits.priority_ceiling
-                        > crate::scheduler::priority::PriorityClass::Critical
-                {
-                    // This is actually always fine because Critical is 0 (lowest enum value)
-                    // but the real check is against the ceiling.
-                }
+                && self.resource_limits.priority_ceiling
+                    > crate::scheduler::priority::PriorityClass::Critical
+            {
+                // This is actually always fine because Critical is 0 (lowest enum value)
+                // but the real check is against the ceiling.
+            }
         }
         Ok(())
     }
 
     /// Extract the list of required (non-optional) permissions.
     pub fn required_permissions(&self) -> Vec<Permission> {
-        self.permissions.iter()
+        self.permissions
+            .iter()
             .filter(|r| !r.optional)
             .map(|r| r.permission)
             .collect()

@@ -51,7 +51,8 @@ pub fn run_query_bytes(module_src: &[u8], query: &str) -> Result<Vec<ExtensionRe
     store.limiter(|s| &mut s.limits);
     store.set_fuel(FUEL).map_err(|e| format!("fuel: {e}"))?;
 
-    let instance = Instance::new(&mut store, &module, &[]).map_err(|e| format!("instantiate: {e}"))?;
+    let instance =
+        Instance::new(&mut store, &module, &[]).map_err(|e| format!("instantiate: {e}"))?;
 
     let memory = instance
         .get_memory(&mut store, "memory")
@@ -65,7 +66,9 @@ pub fn run_query_bytes(module_src: &[u8], query: &str) -> Result<Vec<ExtensionRe
 
     // Pass the query into guest memory.
     let q = query.as_bytes();
-    let in_ptr = alloc.call(&mut store, q.len() as i32).map_err(|e| format!("alloc trap: {e}"))?;
+    let in_ptr = alloc
+        .call(&mut store, q.len() as i32)
+        .map_err(|e| format!("alloc trap: {e}"))?;
     memory
         .write(&mut store, in_ptr as usize, q)
         .map_err(|e| format!("write input: {e}"))?;
@@ -78,12 +81,15 @@ pub fn run_query_bytes(module_src: &[u8], query: &str) -> Result<Vec<ExtensionRe
     let out_len = (packed & 0xFFFF_FFFF) as usize;
 
     let data = memory.data(&store);
-    let end = out_ptr.checked_add(out_len).ok_or("result length overflow")?;
+    let end = out_ptr
+        .checked_add(out_len)
+        .ok_or("result length overflow")?;
     if end > data.len() {
         return Err("result pointer out of bounds".into());
     }
     let json = &data[out_ptr..end];
-    serde_json::from_slice::<Vec<ExtensionResult>>(json).map_err(|e| format!("bad result json: {e}"))
+    serde_json::from_slice::<Vec<ExtensionResult>>(json)
+        .map_err(|e| format!("bad result json: {e}"))
 }
 
 #[cfg(test)]

@@ -9,7 +9,7 @@
 //! - `plugin.vscode.process.spawn` — VSCode adapter can spawn processes
 //! - `kernel.automation.window` — Kernel-level window automation
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// A hierarchical, dot-separated namespace.
 ///
@@ -35,15 +35,23 @@ impl Namespace {
         let path = path.into();
         assert!(!path.is_empty(), "Namespace path must not be empty");
         assert!(
-            path.chars().all(|c| c.is_alphanumeric() || c == '.' || c == '_' || c == '-' || c == '~' || c == '/'),
-            "Invalid namespace character in '{}'", path
+            path.chars().all(|c| c.is_alphanumeric()
+                || c == '.'
+                || c == '_'
+                || c == '-'
+                || c == '~'
+                || c == '/'),
+            "Invalid namespace character in '{}'",
+            path
         );
         let depth = path.split('.').count();
         Self { path, depth }
     }
 
     /// The root kernel namespace. Only the kernel itself holds capabilities here.
-    pub fn kernel() -> Self { Self::new("kernel") }
+    pub fn kernel() -> Self {
+        Self::new("kernel")
+    }
 
     /// Create a plugin-scoped namespace.
     pub fn plugin(plugin_name: &str) -> Self {
@@ -71,7 +79,8 @@ impl Namespace {
         if self.path == other.path {
             return true;
         }
-        other.path.starts_with(&self.path) && other.path.as_bytes().get(self.path.len()) == Some(&b'.')
+        other.path.starts_with(&self.path)
+            && other.path.as_bytes().get(self.path.len()) == Some(&b'.')
     }
 
     /// Check if two namespaces are in completely disjoint trees.
@@ -82,15 +91,21 @@ impl Namespace {
 
     /// Returns the full namespace path.
     #[inline]
-    pub fn as_str(&self) -> &str { &self.path }
+    pub fn as_str(&self) -> &str {
+        &self.path
+    }
 
     /// Returns the depth (number of segments).
     #[inline]
-    pub fn depth(&self) -> usize { self.depth }
+    pub fn depth(&self) -> usize {
+        self.depth
+    }
 
     /// Returns the parent namespace, or None if this is a root namespace.
     pub fn parent(&self) -> Option<Namespace> {
-        self.path.rfind('.').map(|idx| Namespace::new(&self.path[..idx]))
+        self.path
+            .rfind('.')
+            .map(|idx| Namespace::new(&self.path[..idx]))
     }
 }
 
@@ -132,6 +147,9 @@ mod tests {
     fn parent_navigation() {
         let ns = Namespace::new("plugin.chatgpt.filesystem.read");
         assert_eq!(ns.parent().unwrap().as_str(), "plugin.chatgpt.filesystem");
-        assert_eq!(ns.parent().unwrap().parent().unwrap().as_str(), "plugin.chatgpt");
+        assert_eq!(
+            ns.parent().unwrap().parent().unwrap().as_str(),
+            "plugin.chatgpt"
+        );
     }
 }

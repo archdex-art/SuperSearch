@@ -5,12 +5,12 @@
 //! rate limits. Those are governance concerns handled by middleware that wraps
 //! the future *before* it reaches the scheduler.
 
+use super::priority::PriorityClass;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use tokio_util::sync::CancellationToken;
-use super::priority::PriorityClass;
 
 /// Monotonically increasing task identifier. Lock-free atomic counter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -23,7 +23,9 @@ impl TaskId {
         TaskId(COUNTER.fetch_add(1, Ordering::Relaxed))
     }
     #[inline]
-    pub const fn raw(self) -> u64 { self.0 }
+    pub const fn raw(self) -> u64 {
+        self.0
+    }
 }
 
 impl std::fmt::Display for TaskId {
@@ -53,13 +55,21 @@ impl CancellationHandle {
     }
     /// Non-blocking check (~1ns atomic load on x86_64).
     #[inline]
-    pub fn is_cancelled(&self) -> bool { self.task_token.is_cancelled() }
+    pub fn is_cancelled(&self) -> bool {
+        self.task_token.is_cancelled()
+    }
     #[inline]
-    pub fn cancel(&self) { self.task_token.cancel(); }
+    pub fn cancel(&self) {
+        self.task_token.cancel();
+    }
     #[inline]
-    pub async fn cancelled(&self) { self.task_token.cancelled().await; }
+    pub async fn cancelled(&self) {
+        self.task_token.cancelled().await;
+    }
     #[inline]
-    pub fn token(&self) -> &CancellationToken { &self.task_token }
+    pub fn token(&self) -> &CancellationToken {
+        &self.task_token
+    }
 }
 
 /// Source provenance for event journal replay.
@@ -101,14 +111,20 @@ impl TaskDescriptor {
             poll_budget: priority.poll_budget(),
             age_ticks: 0,
             cancellation: CancellationHandle::new(class_token),
-            provenance: TaskProvenance { origin, label, created_at: now },
+            provenance: TaskProvenance {
+                origin,
+                label,
+                created_at: now,
+            },
             fast_path_bypass: matches!(priority, PriorityClass::Critical),
         }
     }
 
     /// Cost: ~25ns (`Instant::now()` via `clock_gettime` on x86_64).
     #[inline]
-    pub fn is_overdue(&self) -> bool { Instant::now() >= self.deadline_at }
+    pub fn is_overdue(&self) -> bool {
+        Instant::now() >= self.deadline_at
+    }
 
     #[inline]
     pub fn remaining_budget(&self) -> Duration {
@@ -132,9 +148,13 @@ pub struct TaskHandle {
 
 impl TaskHandle {
     pub fn new<F>(descriptor: TaskDescriptor, future: F) -> Self
-    where F: Future<Output = ()> + Send + 'static,
+    where
+        F: Future<Output = ()> + Send + 'static,
     {
-        Self { descriptor, future: Some(Box::pin(future)) }
+        Self {
+            descriptor,
+            future: Some(Box::pin(future)),
+        }
     }
 }
 
@@ -160,19 +180,48 @@ pub struct TaskBuilder<'a> {
 impl<'a> TaskBuilder<'a> {
     #[inline]
     pub fn new(priority: PriorityClass, class_token: &'a CancellationToken) -> Self {
-        Self { priority, class_token, origin: "unknown", label: "unnamed", fast_path: None, poll_budget_override: None }
+        Self {
+            priority,
+            class_token,
+            origin: "unknown",
+            label: "unnamed",
+            fast_path: None,
+            poll_budget_override: None,
+        }
     }
-    #[inline] pub fn origin(mut self, v: &'static str) -> Self { self.origin = v; self }
-    #[inline] pub fn label(mut self, v: &'static str) -> Self { self.label = v; self }
-    #[inline] pub fn fast_path(mut self, v: bool) -> Self { self.fast_path = Some(v); self }
-    #[inline] pub fn poll_budget(mut self, v: u32) -> Self { self.poll_budget_override = Some(v); self }
+    #[inline]
+    pub fn origin(mut self, v: &'static str) -> Self {
+        self.origin = v;
+        self
+    }
+    #[inline]
+    pub fn label(mut self, v: &'static str) -> Self {
+        self.label = v;
+        self
+    }
+    #[inline]
+    pub fn fast_path(mut self, v: bool) -> Self {
+        self.fast_path = Some(v);
+        self
+    }
+    #[inline]
+    pub fn poll_budget(mut self, v: u32) -> Self {
+        self.poll_budget_override = Some(v);
+        self
+    }
 
     pub fn spawn<F>(self, future: F) -> TaskHandle
-    where F: Future<Output = ()> + Send + 'static,
+    where
+        F: Future<Output = ()> + Send + 'static,
     {
-        let mut desc = TaskDescriptor::new(self.priority, self.class_token, self.origin, self.label);
-        if let Some(fp) = self.fast_path { desc.fast_path_bypass = fp; }
-        if let Some(b) = self.poll_budget_override { desc.poll_budget = b; }
+        let mut desc =
+            TaskDescriptor::new(self.priority, self.class_token, self.origin, self.label);
+        if let Some(fp) = self.fast_path {
+            desc.fast_path_bypass = fp;
+        }
+        if let Some(b) = self.poll_budget_override {
+            desc.poll_budget = b;
+        }
         TaskHandle::new(desc, future)
     }
 }

@@ -47,7 +47,10 @@ impl TaskPlanner {
         let mut graph = TaskGraph::new(format!("Launch {}", app_name));
         graph.add_node(
             format!("Launch {}", app_name),
-            TaskNodeKind::LaunchApp { app_name: app_name.to_string(), args: args.to_vec() },
+            TaskNodeKind::LaunchApp {
+                app_name: app_name.to_string(),
+                args: args.to_vec(),
+            },
         );
         debug!(app = app_name, "Planned: launch app");
         graph
@@ -57,7 +60,9 @@ impl TaskPlanner {
         let mut graph = TaskGraph::new(format!("Open {}", path));
         graph.add_node(
             format!("Open {}", path),
-            TaskNodeKind::OpenFile { path: path.to_string() },
+            TaskNodeKind::OpenFile {
+                path: path.to_string(),
+            },
         );
         graph
     }
@@ -66,7 +71,9 @@ impl TaskPlanner {
         let mut graph = TaskGraph::new(format!("Open {}", url));
         graph.add_node(
             format!("Open {}", url),
-            TaskNodeKind::OpenUrl { url: url.to_string() },
+            TaskNodeKind::OpenUrl {
+                url: url.to_string(),
+            },
         );
         graph
     }
@@ -75,7 +82,9 @@ impl TaskPlanner {
         let mut graph = TaskGraph::new(format!("Web Search: {}", query));
         graph.add_node(
             format!("Search for \"{}\"", query),
-            TaskNodeKind::WebSearch { query: query.to_string() },
+            TaskNodeKind::WebSearch {
+                query: query.to_string(),
+            },
         );
         graph
     }
@@ -84,7 +93,9 @@ impl TaskPlanner {
         let mut graph = TaskGraph::new(format!("Find files: {}", query));
         graph.add_node(
             format!("Search for \"{}\"", query),
-            TaskNodeKind::FindFiles { query: query.to_string() },
+            TaskNodeKind::FindFiles {
+                query: query.to_string(),
+            },
         );
         graph
     }
@@ -99,7 +110,9 @@ impl TaskPlanner {
         let mut graph = TaskGraph::new("Write to clipboard");
         graph.add_node(
             "Write to clipboard",
-            TaskNodeKind::ClipboardWrite { content: content.to_string() },
+            TaskNodeKind::ClipboardWrite {
+                content: content.to_string(),
+            },
         );
         graph
     }
@@ -194,7 +207,10 @@ impl TaskPlanner {
             InfoKind::Cpu => ("CPU Usage", "top -l 1 -n 0 | head -10"),
             InfoKind::Network => ("Network Info", "ifconfig en0 | grep inet"),
             InfoKind::Uptime => ("System Uptime", "uptime"),
-            InfoKind::General => ("System Info", "sw_vers && sysctl -n hw.memsize && df -h / | tail -1"),
+            InfoKind::General => (
+                "System Info",
+                "sw_vers && sysctl -n hw.memsize && df -h / | tail -1",
+            ),
         };
 
         let mut graph = TaskGraph::new(label);
@@ -212,7 +228,9 @@ impl TaskPlanner {
         let mut graph = TaskGraph::new(format!("Quit {}", app_name));
         graph.add_node(
             format!("Quit {}", app_name),
-            TaskNodeKind::QuitApp { app_name: app_name.to_string() },
+            TaskNodeKind::QuitApp {
+                app_name: app_name.to_string(),
+            },
         );
         graph
     }
@@ -221,16 +239,16 @@ impl TaskPlanner {
         let mut graph = TaskGraph::new(format!("Switch to {}", app_name));
         graph.add_node(
             format!("Switch to {}", app_name),
-            TaskNodeKind::SwitchApp { app_name: app_name.to_string() },
+            TaskNodeKind::SwitchApp {
+                app_name: app_name.to_string(),
+            },
         );
         graph
     }
 
     fn plan_multi_step(&self, intents: &[AgentIntent]) -> TaskGraph {
-        let descriptions: Vec<String> = intents
-            .iter()
-            .map(|i| self.intent_description(i))
-            .collect();
+        let descriptions: Vec<String> =
+            intents.iter().map(|i| self.intent_description(i)).collect();
         let mut graph = TaskGraph::new(descriptions.join(", "));
 
         // For multi-step, each step depends on the previous (sequential by
@@ -268,7 +286,9 @@ impl TaskPlanner {
         let mut graph = TaskGraph::new(format!("Search: {}", query));
         graph.add_node(
             format!("Search for \"{}\"", query),
-            TaskNodeKind::FindFiles { query: query.to_string() },
+            TaskNodeKind::FindFiles {
+                query: query.to_string(),
+            },
         );
         graph
     }

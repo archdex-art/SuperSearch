@@ -8,7 +8,7 @@
 
 use std::time::Duration;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// The five-tier priority classification mirroring Chromium's task scheduling
 /// model, extended with latency budgets from the runtime specification.
@@ -96,9 +96,9 @@ impl PriorityClass {
     pub const fn poll_budget(self) -> u32 {
         match self {
             PriorityClass::Critical => 4,     // Finish fast or yield immediately
-            PriorityClass::Interactive => 16,  // One frame's worth of polls
+            PriorityClass::Interactive => 16, // One frame's worth of polls
             PriorityClass::UserBlocking => 64,
-            PriorityClass::Background => 128,  // Tokio default
+            PriorityClass::Background => 128, // Tokio default
             PriorityClass::Idle => 256,
         }
     }
@@ -112,10 +112,10 @@ impl PriorityClass {
     pub const fn aging_threshold_ticks(self) -> u64 {
         match self {
             PriorityClass::Critical => u64::MAX, // Never demoted; already highest
-            PriorityClass::Interactive => 120,    // ~2 seconds at 60 ticks/sec
-            PriorityClass::UserBlocking => 300,   // ~5 seconds
-            PriorityClass::Background => 600,     // ~10 seconds
-            PriorityClass::Idle => 1800,          // ~30 seconds
+            PriorityClass::Interactive => 120,   // ~2 seconds at 60 ticks/sec
+            PriorityClass::UserBlocking => 300,  // ~5 seconds
+            PriorityClass::Background => 600,    // ~10 seconds
+            PriorityClass::Idle => 1800,         // ~30 seconds
         }
     }
 

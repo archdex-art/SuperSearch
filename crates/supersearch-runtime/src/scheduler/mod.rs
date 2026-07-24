@@ -14,16 +14,16 @@
 //! middleware that decorates futures *before* submission to this scheduler.
 //! The scheduler treats all submitted futures as opaque work units.
 
+pub mod executor;
 pub mod priority;
-pub mod task;
 pub mod queue;
 pub mod supervisor;
+pub mod task;
 pub mod yielding;
-pub mod executor;
 
-pub use priority::PriorityClass;
-pub use task::{TaskHandle, TaskDescriptor, TaskId, CancellationHandle};
-pub use queue::MultiQueue;
-pub use supervisor::{Supervisor, RestartPolicy, SupervisorStrategy};
 pub use executor::SchedulerExecutor;
+pub use priority::PriorityClass;
+pub use queue::MultiQueue;
+pub use supervisor::{RestartPolicy, Supervisor, SupervisorStrategy};
+pub use task::{CancellationHandle, TaskDescriptor, TaskHandle, TaskId};
 pub use yielding::cooperative_yield_loop;

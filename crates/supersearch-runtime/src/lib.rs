@@ -26,12 +26,12 @@
 //! | `kernel`    | Privileged OS automation primitives                     |
 //! | `platform`  | OS abstraction layer — backends behind one stable trait |
 
-pub mod scheduler;
-pub mod journal;
+pub mod agent;
 pub mod capability;
-pub mod reactive;
-pub mod plugin;
+pub mod extension;
+pub mod journal;
 pub mod kernel;
 pub mod platform;
-pub mod agent;
-pub mod extension;
+pub mod plugin;
+pub mod reactive;
+pub mod scheduler;

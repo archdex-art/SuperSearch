@@ -101,7 +101,8 @@ pub fn run_query(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    let mut child = spawn_retrying_on_text_busy(&mut cmd).map_err(|e| HostError::Spawn(e.to_string()))?;
+    let mut child =
+        spawn_retrying_on_text_busy(&mut cmd).map_err(|e| HostError::Spawn(e.to_string()))?;
 
     // Drain stdout/stderr on background threads concurrently with the poll
     // loop below. Without this, a script that writes more than the OS pipe

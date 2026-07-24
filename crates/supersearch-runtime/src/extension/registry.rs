@@ -24,8 +24,8 @@ use crate::capability::registry::CapabilityRegistry;
 use crate::capability::token::{CapabilityToken, Permission};
 
 use super::host::{self, ExtensionAction};
-use super::wasm;
 use super::manifest::{ExtensionKind, ExtensionManifest};
+use super::wasm;
 
 /// Per-extension search budget. A slow extension is abandoned (its child is
 /// killed) rather than stalling the palette — far tighter than the 10s one-off
@@ -123,7 +123,11 @@ pub struct ExtensionRegistry {
 
 impl ExtensionRegistry {
     /// Create a registry rooted at `dir`. Call [`load`](Self::load) to scan.
-    pub fn new(dir: PathBuf, capabilities: Arc<CapabilityRegistry>, gate: Arc<CapabilityGate>) -> Self {
+    pub fn new(
+        dir: PathBuf,
+        capabilities: Arc<CapabilityRegistry>,
+        gate: Arc<CapabilityGate>,
+    ) -> Self {
         Self {
             dir,
             records: RwLock::new(Vec::new()),
@@ -156,7 +160,8 @@ impl ExtensionRegistry {
                     continue;
                 }
             };
-            let manifest = match ExtensionManifest::from_toml(&text).map_err(|e| e.to_string())
+            let manifest = match ExtensionManifest::from_toml(&text)
+                .map_err(|e| e.to_string())
                 .and_then(|m| m.validate().map(|_| m).map_err(|e| e.to_string()))
             {
                 Ok(m) => m,
@@ -167,7 +172,11 @@ impl ExtensionRegistry {
             };
 
             let state = saved.get(&manifest.id).copied().unwrap_or_default();
-            let token = if state.enabled { Some(self.grant_for(&manifest)) } else { None };
+            let token = if state.enabled {
+                Some(self.grant_for(&manifest))
+            } else {
+                None
+            };
             records.push(ExtensionRecord {
                 manifest,
                 dir: path,
@@ -233,7 +242,9 @@ impl ExtensionRegistry {
             .map_err(|_| ExtensionError::Manifest("missing manifest.toml".into()))?;
         let manifest = ExtensionManifest::from_toml(&text)
             .map_err(|e| ExtensionError::Manifest(e.to_string()))?;
-        manifest.validate().map_err(|e| ExtensionError::Manifest(e.to_string()))?;
+        manifest
+            .validate()
+            .map_err(|e| ExtensionError::Manifest(e.to_string()))?;
 
         let dest = self.dir.join(&manifest.id);
         if dest.exists() {
@@ -299,14 +310,20 @@ impl ExtensionRegistry {
         // extension can't stall search. Each runs on its own thread; a script
         // that overruns is killed by `host::run_query`'s own timeout, and the
         // whole fan-out is bounded by the overall deadline below.
-        let (tx, rx) = std::sync::mpsc::channel::<(String, Result<Vec<host::ExtensionResult>, host::HostError>)>();
+        let (tx, rx) = std::sync::mpsc::channel::<(
+            String,
+            Result<Vec<host::ExtensionResult>, host::HostError>,
+        )>();
         let mut spawned = 0usize;
         for (id, kind, dir, entrypoint, trusted) in targets {
             // B1: a raw script runs unsandboxed (full user privileges), so it
             // only participates once the user has explicitly trusted it. WASM
             // extensions are sandboxed by wasmtime and always run.
             if kind == ExtensionKind::Script && !trusted {
-                warn!(id, "Skipping untrusted script extension — enable trust to run it");
+                warn!(
+                    id,
+                    "Skipping untrusted script extension — enable trust to run it"
+                );
                 continue;
             }
             let tx = tx.clone();
@@ -316,13 +333,23 @@ impl ExtensionRegistry {
                 // timeout, wasm via its fuel budget. `catch_unwind` guarantees a
                 // worker always reports exactly once (even on panic), so the
                 // blocking collection below is deterministic and can never hang.
-                let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match kind {
-                    ExtensionKind::Script => host::run_query(&dir, &entrypoint, &input, SEARCH_BUDGET),
-                    ExtensionKind::Wasm => {
-                        wasm::run_query(&dir.join(&entrypoint), &input).map_err(host::HostError::BadOutput)
-                    }
-                }))
-                .unwrap_or_else(|_| Err(host::HostError::BadOutput("extension worker panicked".into())));
+                let outcome =
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match kind {
+                        ExtensionKind::Script => {
+                            host::run_query(&dir, &entrypoint, &input, SEARCH_BUDGET)
+                        }
+                        ExtensionKind::Wasm => wasm::run_query(&dir.join(&entrypoint), &input)
+                            .map_err(host::HostError::BadOutput),
+                        ExtensionKind::Js => {
+                            // M1: Hook into V8 Runtime Allocator here
+                            Ok(vec![])
+                        }
+                    }))
+                    .unwrap_or_else(|_| {
+                        Err(host::HostError::BadOutput(
+                            "extension worker panicked".into(),
+                        ))
+                    });
                 let _ = tx.send((id, outcome));
             });
             spawned += 1;
@@ -372,7 +399,8 @@ impl ExtensionRegistry {
             ExtensionAction::Copy { .. } => ("clipboard", Permission::ClipboardWrite),
         };
         let ns = Namespace::new(format!("plugin.{}.{}", id, namespace));
-        if let GateDecision::Denied { reason, .. } = self.gate.check(Some(&token), &ns, permission) {
+        if let GateDecision::Denied { reason, .. } = self.gate.check(Some(&token), &ns, permission)
+        {
             return Err(ExtensionError::PermissionDenied(format!(
                 "{:?} requires {:?}: {}",
                 action, permission, reason
@@ -411,7 +439,15 @@ impl ExtensionRegistry {
         if let Ok(old) = serde_json::from_str::<HashMap<String, bool>>(&text) {
             return old
                 .into_iter()
-                .map(|(k, enabled)| (k, RecordState { enabled, trusted: false }))
+                .map(|(k, enabled)| {
+                    (
+                        k,
+                        RecordState {
+                            enabled,
+                            trusted: false,
+                        },
+                    )
+                })
                 .collect();
         }
         HashMap::new()
@@ -422,7 +458,15 @@ impl ExtensionRegistry {
             .records
             .read()
             .iter()
-            .map(|r| (r.manifest.id.clone(), RecordState { enabled: r.enabled, trusted: r.trusted }))
+            .map(|r| {
+                (
+                    r.manifest.id.clone(),
+                    RecordState {
+                        enabled: r.enabled,
+                        trusted: r.trusted,
+                    },
+                )
+            })
             .collect();
         match serde_json::to_string_pretty(&state) {
             Ok(json) => {
@@ -459,7 +503,10 @@ fn record_info(r: &ExtensionRecord) -> ExtensionInfo {
 }
 
 fn keyword_match(keywords: &[String], input_lower: &str) -> bool {
-    keywords.is_empty() || keywords.iter().any(|k| input_lower.contains(&k.to_lowercase()))
+    keywords.is_empty()
+        || keywords
+            .iter()
+            .any(|k| input_lower.contains(&k.to_lowercase()))
 }
 
 /// Perform the OS side of an extension action via argv spawns (no shell).
@@ -486,7 +533,9 @@ fn run_action(action: &ExtensionAction) -> Result<(), String> {
                 .spawn()
                 .map_err(|e| e.to_string())?;
             if let Some(mut stdin) = child.stdin.take() {
-                stdin.write_all(text.as_bytes()).map_err(|e| e.to_string())?;
+                stdin
+                    .write_all(text.as_bytes())
+                    .map_err(|e| e.to_string())?;
             }
             child.wait().map(|_| ()).map_err(|e| e.to_string())
         }
@@ -509,7 +558,10 @@ fn copy_dir(src: &Path, dest: &Path) -> Result<(), std::io::Error> {
             {
                 use std::os::unix::fs::PermissionsExt;
                 if let Ok(meta) = std::fs::metadata(&from) {
-                    let _ = std::fs::set_permissions(&to, std::fs::Permissions::from_mode(meta.permissions().mode()));
+                    let _ = std::fs::set_permissions(
+                        &to,
+                        std::fs::Permissions::from_mode(meta.permissions().mode()),
+                    );
                 }
             }
         }
@@ -544,7 +596,11 @@ mod tests {
         )
         .unwrap();
         let script = ext.join("run.sh");
-        fs::write(&script, "#!/bin/sh\nprintf '[{\"title\":\"R:%s\"}]' \"$1\"\n").unwrap();
+        fs::write(
+            &script,
+            "#!/bin/sh\nprintf '[{\"title\":\"R:%s\"}]' \"$1\"\n",
+        )
+        .unwrap();
         fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
         ext
     }
@@ -585,8 +641,14 @@ mod tests {
         // it is trusted it stays out of the query fan-out (B1 sandbox gate).
         reg.set_enabled("demo", true).unwrap();
         assert!(reg.list()[0].enabled);
-        assert!(reg.list()[0].needs_trust, "untrusted script should flag needs_trust");
-        assert!(reg.query("hi").is_empty(), "untrusted script must not run in queries");
+        assert!(
+            reg.list()[0].needs_trust,
+            "untrusted script should flag needs_trust"
+        );
+        assert!(
+            reg.query("hi").is_empty(),
+            "untrusted script must not run in queries"
+        );
 
         // Trust → query runs.
         reg.set_trusted("demo", true).unwrap();
@@ -603,8 +665,15 @@ mod tests {
         );
         reloaded.load().unwrap();
         assert!(reloaded.list()[0].enabled);
-        assert!(reloaded.list()[0].trusted, "trust must persist across reload");
-        assert_eq!(query_until(&reloaded, "hi", 1).len(), 1, "trusted+enabled script runs after reload");
+        assert!(
+            reloaded.list()[0].trusted,
+            "trust must persist across reload"
+        );
+        assert_eq!(
+            query_until(&reloaded, "hi", 1).len(),
+            1,
+            "trusted+enabled script runs after reload"
+        );
 
         // Disable → not consulted again.
         reg.set_enabled("demo", false).unwrap();

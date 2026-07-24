@@ -15,7 +15,7 @@
 
 use std::time::{Duration, Instant};
 use thiserror::Error;
-use tracing::{error, info, warn, instrument};
+use tracing::{error, info, instrument, warn};
 
 /// How many times a child can restart before the supervisor escalates.
 #[derive(Debug, Clone)]
@@ -28,7 +28,10 @@ impl Default for RestartIntensity {
     fn default() -> Self {
         // 5 restarts in 60 seconds — aggressive enough to catch crash loops,
         // lenient enough to tolerate transient failures.
-        Self { max_restarts: 5, window: Duration::from_secs(60) }
+        Self {
+            max_restarts: 5,
+            window: Duration::from_secs(60),
+        }
     }
 }
 
@@ -87,13 +90,18 @@ struct RestartHistory {
 }
 
 impl RestartHistory {
-    fn new() -> Self { Self { timestamps: Vec::new() } }
+    fn new() -> Self {
+        Self {
+            timestamps: Vec::new(),
+        }
+    }
 
     /// Record a restart and return whether the intensity limit is exceeded.
     fn record_restart(&mut self, intensity: &RestartIntensity) -> bool {
         let now = Instant::now();
         // Prune restarts outside the window.
-        self.timestamps.retain(|t| now.duration_since(*t) < intensity.window);
+        self.timestamps
+            .retain(|t| now.duration_since(*t) < intensity.window);
         self.timestamps.push(now);
         self.timestamps.len() as u32 > intensity.max_restarts
     }
@@ -109,7 +117,11 @@ pub struct ChildSpec {
 
 impl ChildSpec {
     pub fn new(name: impl Into<String>, policy: RestartPolicy) -> Self {
-        Self { name: name.into(), policy, history: RestartHistory::new() }
+        Self {
+            name: name.into(),
+            policy,
+            history: RestartHistory::new(),
+        }
     }
 }
 
@@ -146,7 +158,10 @@ impl Supervisor {
         &mut self,
         failed_child_name: &str,
     ) -> Result<RestartAction, SupervisorError> {
-        let child_idx = self.children.iter().position(|c| c.name == failed_child_name);
+        let child_idx = self
+            .children
+            .iter()
+            .position(|c| c.name == failed_child_name);
         let child_idx = match child_idx {
             Some(idx) => idx,
             None => {
@@ -171,22 +186,37 @@ impl Supervisor {
         }
 
         if exceeded && !child.policy.essential {
-            warn!(child = failed_child_name, "Non-essential child exceeded restart intensity — abandoning");
+            warn!(
+                child = failed_child_name,
+                "Non-essential child exceeded restart intensity — abandoning"
+            );
             return Ok(RestartAction::None);
         }
 
         let names_to_restart = match self.strategy {
             SupervisorStrategy::OneForOne => {
-                info!(child = failed_child_name, "OneForOne: restarting failed child");
+                info!(
+                    child = failed_child_name,
+                    "OneForOne: restarting failed child"
+                );
                 vec![failed_child_name.to_string()]
             }
             SupervisorStrategy::OneForAll => {
-                info!(child = failed_child_name, "OneForAll: restarting all children");
+                info!(
+                    child = failed_child_name,
+                    "OneForAll: restarting all children"
+                );
                 self.children.iter().map(|c| c.name.clone()).collect()
             }
             SupervisorStrategy::RestForOne => {
-                info!(child = failed_child_name, "RestForOne: restarting from failed child onward");
-                self.children[child_idx..].iter().map(|c| c.name.clone()).collect()
+                info!(
+                    child = failed_child_name,
+                    "RestForOne: restarting from failed child onward"
+                );
+                self.children[child_idx..]
+                    .iter()
+                    .map(|c| c.name.clone())
+                    .collect()
             }
         };
 

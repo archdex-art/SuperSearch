@@ -9,7 +9,7 @@
 use std::path::{Path, PathBuf};
 use tracing::{debug, warn};
 
-use super::entry::{JournalEntry, EntryKind, SequenceNumber};
+use super::entry::{EntryKind, JournalEntry, SequenceNumber};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ReaderError {
@@ -17,10 +17,20 @@ pub enum ReaderError {
     Io(#[from] std::io::Error),
     #[error("Deserialization error at offset {offset}: {message}")]
     Deserialization { offset: usize, message: String },
-    #[error("CRC32 mismatch at sequence {sequence}: expected {expected:#010x}, got {actual:#010x}")]
-    ChecksumMismatch { sequence: u64, expected: u32, actual: u32 },
+    #[error(
+        "CRC32 mismatch at sequence {sequence}: expected {expected:#010x}, got {actual:#010x}"
+    )]
+    ChecksumMismatch {
+        sequence: u64,
+        expected: u32,
+        actual: u32,
+    },
     #[error("Truncated entry at offset {offset}: need {need} bytes, have {have}")]
-    Truncated { offset: usize, need: usize, have: usize },
+    Truncated {
+        offset: usize,
+        need: usize,
+        have: usize,
+    },
 }
 
 /// Iterator over journal entries in a single segment.
@@ -37,7 +47,10 @@ pub struct SegmentIterator {
 
 impl SegmentIterator {
     /// Load a segment file into memory and prepare for iteration.
-    pub async fn open(path: impl AsRef<Path>, validate_checksums: bool) -> Result<Self, ReaderError> {
+    pub async fn open(
+        path: impl AsRef<Path>,
+        validate_checksums: bool,
+    ) -> Result<Self, ReaderError> {
         let path = path.as_ref().to_path_buf();
         let data = tokio::fs::read(&path).await?;
         debug!(path = %path.display(), bytes = data.len(), "Loaded journal segment");
@@ -82,8 +95,8 @@ impl SegmentIterator {
         }
 
         let entry_bytes = &self.data[self.offset..self.offset + entry_len];
-        let entry: JournalEntry = bincode::deserialize(entry_bytes)
-            .map_err(|e| ReaderError::Deserialization {
+        let entry: JournalEntry =
+            bincode::deserialize(entry_bytes).map_err(|e| ReaderError::Deserialization {
                 offset: self.offset,
                 message: e.to_string(),
             })?;
@@ -115,7 +128,9 @@ impl SegmentIterator {
     }
 
     /// Number of entries read so far.
-    pub fn entries_read(&self) -> u64 { self.entries_read }
+    pub fn entries_read(&self) -> u64 {
+        self.entries_read
+    }
 }
 
 /// Multi-segment journal reader that iterates across all segments in order.
@@ -177,7 +192,9 @@ impl JournalReader {
     /// Find the last checkpoint entry and return its index in the entry list.
     /// Replay can start from this checkpoint instead of the beginning.
     pub fn find_last_checkpoint(entries: &[JournalEntry]) -> Option<usize> {
-        entries.iter().rposition(|e| e.kind == EntryKind::Checkpoint)
+        entries
+            .iter()
+            .rposition(|e| e.kind == EntryKind::Checkpoint)
     }
 
     /// Filter entries by kind.
@@ -191,7 +208,8 @@ impl JournalReader {
         start: SequenceNumber,
         end: SequenceNumber,
     ) -> Vec<&JournalEntry> {
-        entries.iter()
+        entries
+            .iter()
             .filter(|e| e.sequence >= start && e.sequence <= end)
             .collect()
     }

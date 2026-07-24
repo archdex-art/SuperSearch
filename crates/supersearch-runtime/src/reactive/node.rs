@@ -3,7 +3,7 @@
 use std::any::Any;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// Unique identifier for a reactive node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -47,7 +47,9 @@ impl Version {
     pub const INITIAL: Version = Version(0);
 
     #[inline]
-    pub fn increment(&mut self) { self.0 += 1; }
+    pub fn increment(&mut self) {
+        self.0 += 1;
+    }
 }
 
 /// Dirty flags for incremental evaluation.
@@ -145,15 +147,21 @@ impl ReactiveNode {
 
     /// Mark this node as clean.
     #[inline]
-    pub fn mark_clean(&mut self) { self.dirty = DirtyState::Clean; }
+    pub fn mark_clean(&mut self) {
+        self.dirty = DirtyState::Clean;
+    }
 
     /// Mark this node as dirty.
     #[inline]
-    pub fn mark_dirty(&mut self) { self.dirty = DirtyState::Dirty; }
+    pub fn mark_dirty(&mut self) {
+        self.dirty = DirtyState::Dirty;
+    }
 
     /// Mark this node as maybe-dirty (needs dependency check).
     #[inline]
-    pub fn mark_maybe_dirty(&mut self) { self.dirty = DirtyState::MaybeDirty; }
+    pub fn mark_maybe_dirty(&mut self) {
+        self.dirty = DirtyState::MaybeDirty;
+    }
 }
 
 impl std::fmt::Debug for ReactiveNode {

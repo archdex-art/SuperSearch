@@ -7,10 +7,10 @@
 //! - **Revocable**: Contain an atomic `revoked` flag checked on every gate access.
 //! - **Scoped**: Bound to a specific namespace, permission set, and time window.
 
+use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
-use serde::{Serialize, Deserialize};
 
 use super::namespace::Namespace;
 
@@ -101,26 +101,34 @@ impl Permission {
     /// Returns the human-readable category for this permission.
     pub const fn category(&self) -> &'static str {
         match self {
-            Permission::FileRead | Permission::FileWrite
-            | Permission::FileDelete | Permission::DirectoryList => "filesystem",
+            Permission::FileRead
+            | Permission::FileWrite
+            | Permission::FileDelete
+            | Permission::DirectoryList => "filesystem",
 
-            Permission::NetworkConnect | Permission::NetworkListen
+            Permission::NetworkConnect
+            | Permission::NetworkListen
             | Permission::NetworkDnsResolve => "network",
 
-            Permission::ProcessSpawn | Permission::ProcessSignal
-            | Permission::ProcessInspect => "process",
+            Permission::ProcessSpawn | Permission::ProcessSignal | Permission::ProcessInspect => {
+                "process"
+            }
 
-            Permission::WindowEnumerate | Permission::WindowManipulate
-            | Permission::InputSimulate | Permission::ClipboardRead
-            | Permission::ClipboardWrite | Permission::ScreenCapture => "os_automation",
+            Permission::WindowEnumerate
+            | Permission::WindowManipulate
+            | Permission::InputSimulate
+            | Permission::ClipboardRead
+            | Permission::ClipboardWrite
+            | Permission::ScreenCapture => "os_automation",
 
-            Permission::LlmInference | Permission::LlmStreamTokens
+            Permission::LlmInference
+            | Permission::LlmStreamTokens
             | Permission::EmbeddingGenerate => "ai",
 
-            Permission::IpcSend | Permission::IpcReceive
-            | Permission::IpcBroadcast => "ipc",
+            Permission::IpcSend | Permission::IpcReceive | Permission::IpcBroadcast => "ipc",
 
-            Permission::TaskSpawnCritical | Permission::TaskSpawnInteractive
+            Permission::TaskSpawnCritical
+            | Permission::TaskSpawnInteractive
             | Permission::TaskSpawnBackground => "scheduler",
         }
     }

@@ -11,9 +11,9 @@
 //! 3. Evaluate nodes in topological order, skipping nodes whose dependencies
 //!    haven't actually changed (version comparison).
 
-use std::collections::{HashMap, HashSet, VecDeque};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::Direction;
+use std::collections::{HashMap, HashSet, VecDeque};
 use tracing::{debug, trace};
 
 use super::node::{NodeId, ReactiveNode};
@@ -98,7 +98,10 @@ impl DependencyGraph {
         // Find all nodes that depend ON the signal (reverse edge direction).
         // In our graph, edges go dependent → dependency, so we follow
         // incoming edges to find dependents.
-        for neighbor in self.graph.neighbors_directed(signal_idx, Direction::Incoming) {
+        for neighbor in self
+            .graph
+            .neighbors_directed(signal_idx, Direction::Incoming)
+        {
             queue.push_back(neighbor);
             dirty_set.insert(neighbor);
         }
@@ -131,7 +134,8 @@ impl DependencyGraph {
         }
 
         let mut eval_order: Vec<NodeId> = Vec::with_capacity(dirty_set.len());
-        let mut ready: VecDeque<NodeIndex> = in_degree.iter()
+        let mut ready: VecDeque<NodeIndex> = in_degree
+            .iter()
             .filter(|(_, &deg)| deg == 0)
             .map(|(&idx, _)| idx)
             .collect();
@@ -180,11 +184,17 @@ impl DependencyGraph {
     }
 
     /// Number of nodes in the graph.
-    pub fn node_count(&self) -> usize { self.graph.node_count() }
+    pub fn node_count(&self) -> usize {
+        self.graph.node_count()
+    }
 
     /// Number of dependency edges.
-    pub fn edge_count(&self) -> usize { self.graph.edge_count() }
+    pub fn edge_count(&self) -> usize {
+        self.graph.edge_count()
+    }
 
     /// Total evaluation batches performed.
-    pub fn eval_count(&self) -> u64 { self.eval_count }
+    pub fn eval_count(&self) -> u64 {
+        self.eval_count
+    }
 }

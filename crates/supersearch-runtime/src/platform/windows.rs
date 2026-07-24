@@ -34,7 +34,13 @@ impl WindowsBackend {
 }
 
 impl PlatformBackend for WindowsBackend {
-    fn launch_app(&self, app_name: &str, args: &[String], label: &str, timeout: Duration) -> StepResult {
+    fn launch_app(
+        &self,
+        app_name: &str,
+        args: &[String],
+        label: &str,
+        timeout: Duration,
+    ) -> StepResult {
         // `explorer` can open .lnk shortcuts and .exe files; for a bare name
         // it searches the PATH like `start` does.
         let mut argv = vec!["explorer".to_string(), app_name.to_string()];
@@ -119,7 +125,13 @@ impl PlatformBackend for WindowsBackend {
         )
     }
 
-    fn run_trusted_script(&self, script: &str, label: &str, capture: bool, timeout: Duration) -> StepResult {
+    fn run_trusted_script(
+        &self,
+        script: &str,
+        label: &str,
+        capture: bool,
+        timeout: Duration,
+    ) -> StepResult {
         if capture {
             exec::run_argv_output(
                 "powershell",

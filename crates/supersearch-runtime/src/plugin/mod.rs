@@ -18,12 +18,12 @@
 //! - Capabilities: Injected at load, revocable at any time.
 //! - IPC: Mediated through Cap'n Proto channels with the kernel.
 
-pub mod manifest;
 pub mod host;
-pub mod sandbox;
 pub mod ipc;
+pub mod manifest;
+pub mod sandbox;
 
-pub use manifest::{PluginManifest, PluginPermissionRequest};
 pub use host::{PluginHost, PluginState};
-pub use sandbox::WasmSandbox;
 pub use ipc::{IpcChannel, IpcMessage};
+pub use manifest::{PluginManifest, PluginPermissionRequest};
+pub use sandbox::WasmSandbox;

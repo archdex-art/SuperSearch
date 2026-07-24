@@ -10,11 +10,9 @@
 //! - **Partial replay**: A sequence range (for debugging specific interactions).
 //! - **Verification**: Replay and compare outputs against a reference journal.
 
+use tracing::{error, info, warn};
 
-use tracing::{info, warn, error};
-
-use super::entry::{JournalEntry, EntryKind, SequenceNumber};
-
+use super::entry::{EntryKind, JournalEntry, SequenceNumber};
 
 /// Replay clock — provides deterministic timestamps during replay.
 /// Instead of reading the real monotonic clock, the replay engine feeds
@@ -32,7 +30,9 @@ impl Default for ReplayClock {
 }
 
 impl ReplayClock {
-    pub fn new() -> Self { Self { current_ns: 0 } }
+    pub fn new() -> Self {
+        Self { current_ns: 0 }
+    }
 
     /// Advance to the timestamp of the given entry.
     pub fn advance_to(&mut self, entry: &JournalEntry) {
@@ -45,7 +45,9 @@ impl ReplayClock {
         self.current_ns = entry.timestamp_ns;
     }
 
-    pub fn current_ns(&self) -> u64 { self.current_ns }
+    pub fn current_ns(&self) -> u64 {
+        self.current_ns
+    }
 }
 
 /// Handler trait for processing replayed events.
@@ -151,8 +153,12 @@ impl ReplayEngine {
         for entry in entries {
             // Apply range filter.
             if let Some((start, end)) = &self.range_filter {
-                if entry.sequence < *start { continue; }
-                if entry.sequence > *end { break; }
+                if entry.sequence < *start {
+                    continue;
+                }
+                if entry.sequence > *end {
+                    break;
+                }
             }
 
             // Sequence gap detection.
@@ -209,9 +215,9 @@ impl ReplayEngine {
             | EntryKind::CapabilityCheck => handler.on_capability_event(entry),
 
             // Plugin events.
-            EntryKind::PluginLoaded
-            | EntryKind::PluginUnloaded
-            | EntryKind::PluginIpcMessage => handler.on_plugin_event(entry),
+            EntryKind::PluginLoaded | EntryKind::PluginUnloaded | EntryKind::PluginIpcMessage => {
+                handler.on_plugin_event(entry)
+            }
 
             // Non-deterministic AI events — payload is the literal token stream.
             EntryKind::LlmInferenceRequest
@@ -238,8 +244,12 @@ impl ReplayEngine {
     }
 
     /// Replay statistics.
-    pub fn stats(&self) -> &ReplayStats { &self.stats }
+    pub fn stats(&self) -> &ReplayStats {
+        &self.stats
+    }
 
     /// Current replay clock position.
-    pub fn clock(&self) -> &ReplayClock { &self.clock }
+    pub fn clock(&self) -> &ReplayClock {
+        &self.clock
+    }
 }

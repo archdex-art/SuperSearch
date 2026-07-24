@@ -102,8 +102,7 @@ pub enum TaskStatus {
 }
 
 /// Retry policy for a task node.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RetryPolicy {
     /// Maximum retry attempts (0 = no retries).
     pub max_retries: u32,
@@ -166,7 +165,10 @@ impl TaskGraph {
 
     /// Add a dependency edge: `prerequisite` must finish before `dependent`.
     pub fn add_edge(&mut self, prerequisite: NodeId, dependent: NodeId) {
-        self.edges.push(TaskEdge { prerequisite, dependent });
+        self.edges.push(TaskEdge {
+            prerequisite,
+            dependent,
+        });
     }
 
     /// Get nodes that have no unfinished prerequisites (ready to execute).
@@ -177,7 +179,8 @@ impl TaskGraph {
                 node.status == TaskStatus::Pending
                     && self.edges.iter().all(|edge| {
                         if edge.dependent == node.id {
-                            self.nodes.get(edge.prerequisite)
+                            self.nodes
+                                .get(edge.prerequisite)
                                 .map(|n| n.status == TaskStatus::Completed)
                                 .unwrap_or(true)
                         } else {
@@ -222,10 +225,15 @@ impl TaskGraph {
 
     /// Check if the entire graph is finished (all nodes completed or failed/skipped).
     pub fn is_finished(&self) -> bool {
-        self.nodes.iter().all(|n| matches!(
-            n.status,
-            TaskStatus::Completed | TaskStatus::Failed | TaskStatus::Skipped | TaskStatus::Cancelled
-        ))
+        self.nodes.iter().all(|n| {
+            matches!(
+                n.status,
+                TaskStatus::Completed
+                    | TaskStatus::Failed
+                    | TaskStatus::Skipped
+                    | TaskStatus::Cancelled
+            )
+        })
     }
 
     /// Update overall metadata status.
@@ -236,12 +244,13 @@ impl TaskGraph {
             } else {
                 self.metadata.status = TaskStatus::Completed;
             }
-        } else if self.metadata.completed_steps > 0 || self.nodes.iter().any(|n| n.status == TaskStatus::Running) {
+        } else if self.metadata.completed_steps > 0
+            || self.nodes.iter().any(|n| n.status == TaskStatus::Running)
+        {
             self.metadata.status = TaskStatus::Running;
         }
     }
 }
-
 
 /// Generate a short unique execution ID.
 fn generate_id() -> String {

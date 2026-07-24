@@ -38,7 +38,12 @@ impl PlatformBackend for MacosBackend {
         let argv: Vec<String> = if args.is_empty() {
             vec!["-a".into(), app_name.to_string()]
         } else {
-            let mut v = vec!["-n".into(), "-a".into(), app_name.to_string(), "--args".into()];
+            let mut v = vec![
+                "-n".into(),
+                "-a".into(),
+                app_name.to_string(),
+                "--args".into(),
+            ];
             v.extend(args.iter().cloned());
             v
         };
@@ -82,7 +87,16 @@ impl PlatformBackend for MacosBackend {
         // the script source — so it cannot break out of the string.
         exec::run_argv(
             "osascript",
-            &["-e", "on run argv", "-e", "tell application (item 1 of argv) to quit", "-e", "end run", "--", app_name],
+            &[
+                "-e",
+                "on run argv",
+                "-e",
+                "tell application (item 1 of argv) to quit",
+                "-e",
+                "end run",
+                "--",
+                app_name,
+            ],
             label,
             timeout,
         )
@@ -91,7 +105,16 @@ impl PlatformBackend for MacosBackend {
     fn switch_app(&self, app_name: &str, label: &str, timeout: Duration) -> StepResult {
         exec::run_argv(
             "osascript",
-            &["-e", "on run argv", "-e", "tell application (item 1 of argv) to activate", "-e", "end run", "--", app_name],
+            &[
+                "-e",
+                "on run argv",
+                "-e",
+                "tell application (item 1 of argv) to activate",
+                "-e",
+                "end run",
+                "--",
+                app_name,
+            ],
             label,
             timeout,
         )

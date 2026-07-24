@@ -19,5 +19,5 @@
 pub mod process;
 pub mod runtime;
 
-pub use process::{ProcessManager, ManagedProcess, ProcessConfig};
+pub use process::{ManagedProcess, ProcessConfig, ProcessManager};
 pub use runtime::RuntimeKernel;

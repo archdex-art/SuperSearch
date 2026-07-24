@@ -1,0 +1,12 @@
+{
+  "name": "supersearch-workspace",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "packages/*",
+    "react-command-palette"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace=@supersearch/reconciler && npm run build --workspace=@supersearch/api && npm run build --workspace=@supersearch/cli"
+  }
+}

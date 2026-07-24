@@ -5,15 +5,15 @@
 //! `crossbeam_queue::ArrayQueue` (bounded, allocation-free after init) for
 //! predictable latency; lower priorities use `SegQueue` (unbounded, lock-free).
 
-use std::collections::VecDeque;
-use std::sync::atomic::{AtomicU64, Ordering};
 use crossbeam_queue::{ArrayQueue, SegQueue};
 use parking_lot::Mutex;
+use std::collections::VecDeque;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, warn, instrument};
+use tracing::{debug, instrument, warn};
 
 use super::priority::PriorityClass;
-use super::task::{TaskHandle, TaskBuilder};
+use super::task::{TaskBuilder, TaskHandle};
 
 /// Capacity of the Critical-priority bounded queue.
 /// 64 slots is sufficient: critical input events arrive at human typing speed
@@ -142,11 +142,19 @@ impl MultiQueue {
         }
         // 2. Drain queues in priority order.
         // Critical: bounded ArrayQueue — pop is lock-free, ~10ns.
-        if let Some(h) = self.critical.pop() { return Some(h); }
+        if let Some(h) = self.critical.pop() {
+            return Some(h);
+        }
         // Interactive through Idle: SegQueue — pop is lock-free, ~15ns.
-        if let Some(h) = self.interactive.pop() { return Some(h); }
-        if let Some(h) = self.user_blocking.pop() { return Some(h); }
-        if let Some(h) = self.background.pop() { return Some(h); }
+        if let Some(h) = self.interactive.pop() {
+            return Some(h);
+        }
+        if let Some(h) = self.user_blocking.pop() {
+            return Some(h);
+        }
+        if let Some(h) = self.background.pop() {
+            return Some(h);
+        }
         self.idle.pop()
     }
 
@@ -178,7 +186,7 @@ impl MultiQueue {
             );
             handle.descriptor.priority = new_priority;
             handle.descriptor.age_ticks = 0; // Reset age after promotion
-            // Recompute deadline with new priority's budget
+                                             // Recompute deadline with new priority's budget
             handle.descriptor.deadline_at =
                 handle.descriptor.provenance.created_at + new_priority.latency_budget();
             self.promoted.lock().push_back(handle);
@@ -208,7 +216,9 @@ impl MultiQueue {
 }
 
 impl Default for MultiQueue {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -225,8 +235,16 @@ mod tests {
         // first).
         let queue = MultiQueue::new();
 
-        let a = queue.builder(PriorityClass::Idle).origin("test").label("a").spawn(async {});
-        let b = queue.builder(PriorityClass::Idle).origin("test").label("b").spawn(async {});
+        let a = queue
+            .builder(PriorityClass::Idle)
+            .origin("test")
+            .label("a")
+            .spawn(async {});
+        let b = queue
+            .builder(PriorityClass::Idle)
+            .origin("test")
+            .label("b")
+            .spawn(async {});
         let a_id = a.descriptor.id;
         let b_id = b.descriptor.id;
 
@@ -236,7 +254,10 @@ mod tests {
 
         let first = queue.dequeue().expect("first promoted task");
         let second = queue.dequeue().expect("second promoted task");
-        assert_eq!(first.descriptor.id, a_id, "the longest-starved task must be serviced first");
+        assert_eq!(
+            first.descriptor.id, a_id,
+            "the longest-starved task must be serviced first"
+        );
         assert_eq!(second.descriptor.id, b_id);
     }
 }

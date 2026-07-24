@@ -13,10 +13,16 @@
 //! that token by the same [`crate::capability::gate::CapabilityGate`] the agent
 //! uses. Nothing an extension does escapes the capability model.
 
-pub mod manifest;
+pub mod discovery;
 pub mod host;
-pub mod wasm;
+pub mod ipc;
+pub mod manifest;
+pub mod marketplace;
 pub mod registry;
+pub mod runtime;
+pub mod scheduler;
+pub mod storage;
+pub mod wasm;
 
 pub use host::{ExtensionAction, ExtensionResult};
 pub use manifest::{ExtensionKind, ExtensionManifest};

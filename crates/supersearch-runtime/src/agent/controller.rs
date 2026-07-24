@@ -73,6 +73,9 @@ pub struct AgentController {
     planner: TaskPlanner,
     /// TaskGraph executor.
     executor: AgentExecutor,
+    /// Loaded MCP tools from installed extensions (Phase 13 AI Integration)
+    pub mcp_tools:
+        parking_lot::RwLock<std::collections::HashMap<String, crate::agent::mcp::InternalTool>>,
     /// Short-term interaction memory.
     memory: Mutex<AgentMemory>,
     /// System context awareness.
@@ -93,10 +96,11 @@ impl AgentController {
         info!("Agent controller initialized");
         Self {
             pattern_engine: PatternEngine::new(),
-            planner: TaskPlanner::new(),
+            context: Mutex::new(ContextEngine::new()),
+            mcp_tools: parking_lot::RwLock::new(std::collections::HashMap::new()),
             executor: AgentExecutor::new(gate, token, journal),
             memory: Mutex::new(AgentMemory::new()),
-            context: Mutex::new(ContextEngine::new()),
+            planner: TaskPlanner::new(),
         }
     }
 
@@ -230,14 +234,23 @@ impl AgentController {
                     _ => return format!("✓ {}", r.label),
                 }
             } else {
-                return format!("✗ {}: {}", r.label, r.error.as_deref().unwrap_or("Unknown error"));
+                return format!(
+                    "✗ {}: {}",
+                    r.label,
+                    r.error.as_deref().unwrap_or("Unknown error")
+                );
             }
         }
 
         if success_count == total {
             format!("✓ All {} steps completed successfully", total)
         } else {
-            format!("⚠ {}/{} steps completed ({} failed)", success_count, total, total - success_count)
+            format!(
+                "⚠ {}/{} steps completed ({} failed)",
+                success_count,
+                total,
+                total - success_count
+            )
         }
     }
 

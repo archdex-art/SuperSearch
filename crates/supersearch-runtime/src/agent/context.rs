@@ -4,8 +4,102 @@
 //! and proactive suggestions. Updated periodically by the kernel.
 
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
-use std::time::Instant;
+use std::collections::{HashMap, VecDeque};
+use std::time::{Duration, Instant};
+
+const CONTEXT_TTL: Duration = Duration::from_secs(3600); // 1 hour TTL for stale context
+const MAX_CONTEXT_PROVIDERS: usize = 10;
+const MAX_PAYLOAD_BYTES: usize = 8192; // Max 8KB per context provider to prevent token exhaustion
+
+/// A rolling window of semantic context provided by extensions.
+/// Designed to prevent token overload when sending state to the LLM.
+#[derive(Debug, Clone)]
+pub struct ContextWindow {
+    /// Foreground context (highest priority). E.g., The active IDE file.
+    active_providers: HashMap<String, ContextItem>,
+    /// Background context (evicted first when token limits are reached).
+    background_providers: HashMap<String, ContextItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContextItem {
+    pub extension_id: String,
+    pub payload: String, // Stringified JSON or Markdown semantic state
+    #[serde(skip, default = "Instant::now")]
+    pub timestamp: Instant,
+}
+
+impl ContextWindow {
+    pub fn new() -> Self {
+        Self {
+            active_providers: HashMap::new(),
+            background_providers: HashMap::new(),
+        }
+    }
+    /// Registers or updates context from an extension, enforcing hard budgeting limits.
+    pub fn push_context(&mut self, extension_id: &str, mut payload: String, is_active: bool) {
+        // Enforce maximum payload size (Context Budgeting M5 Feedback)
+        if payload.len() > MAX_PAYLOAD_BYTES {
+            payload.truncate(MAX_PAYLOAD_BYTES);
+            payload.push_str("...[TRUNCATED]");
+        }
+
+        let item = ContextItem {
+            extension_id: extension_id.to_string(),
+            payload,
+            timestamp: Instant::now(),
+        };
+
+        if is_active {
+            self.active_providers.insert(extension_id.to_string(), item);
+        } else {
+            self.background_providers
+                .insert(extension_id.to_string(), item);
+        }
+
+        // Enforce maximum active providers (Context Budgeting M5 Feedback)
+        if self.active_providers.len() > MAX_CONTEXT_PROVIDERS {
+            // Evict the oldest context
+            if let Some(oldest_key) = self
+                .active_providers
+                .iter()
+                .min_by_key(|entry| entry.1.timestamp)
+                .map(|(k, _)| k.clone())
+            {
+                self.active_providers.remove(&oldest_key);
+            }
+        }
+    }
+
+    /// Evicts stale context that has surpassed the TTL.
+    pub fn prune_stale_context(&mut self) {
+        let now = Instant::now();
+        self.active_providers
+            .retain(|_, item| now.duration_since(item.timestamp) < CONTEXT_TTL);
+        self.background_providers
+            .retain(|_, item| now.duration_since(item.timestamp) < CONTEXT_TTL);
+    }
+
+    /// Flattens the prioritized context into a single prompt-ready string for the LLM.
+    /// In production, this includes token counting to strictly cap at e.g. 16k tokens.
+    pub fn flatten_for_llm(&self) -> String {
+        let mut out = String::from("<context>\n");
+        for (id, item) in &self.active_providers {
+            out.push_str(&format!(
+                "<provider id=\"{}\" state=\"active\">\n{}\n</provider>\n",
+                id, item.payload
+            ));
+        }
+        for (id, item) in &self.background_providers {
+            out.push_str(&format!(
+                "<provider id=\"{}\" state=\"background\">\n{}\n</provider>\n",
+                id, item.payload
+            ));
+        }
+        out.push_str("</context>");
+        out
+    }
+}
 
 /// Maximum recent items to track per category.
 const MAX_RECENT: usize = 20;
@@ -22,6 +116,8 @@ pub struct ContextEngine {
     pub workspace: WorkspaceContext,
     /// Last context update time.
     pub last_update: Instant,
+    /// Rolling window of semantic context provided by extensions.
+    pub extension_context: ContextWindow,
 }
 
 /// Inferred workspace context based on active applications.
@@ -55,6 +151,7 @@ impl ContextEngine {
             recent_files: VecDeque::with_capacity(MAX_RECENT),
             workspace: WorkspaceContext::General,
             last_update: Instant::now(),
+            extension_context: ContextWindow::new(),
         }
     }
 
@@ -96,19 +193,50 @@ impl ContextEngine {
 
     /// Infer workspace context from recent apps.
     fn infer_workspace(&mut self) {
-        let dev_apps = ["code", "terminal", "iterm", "xcode", "intellij", "neovim", "warp", "cursor"];
+        let dev_apps = [
+            "code", "terminal", "iterm", "xcode", "intellij", "neovim", "warp", "cursor",
+        ];
         let comm_apps = ["slack", "teams", "discord", "mail", "zoom", "messages"];
-        let creative_apps = ["figma", "photoshop", "illustrator", "final cut", "premiere", "sketch"];
-        let prod_apps = ["pages", "numbers", "keynote", "word", "excel", "notes", "notion"];
+        let creative_apps = [
+            "figma",
+            "photoshop",
+            "illustrator",
+            "final cut",
+            "premiere",
+            "sketch",
+        ];
+        let prod_apps = [
+            "pages", "numbers", "keynote", "word", "excel", "notes", "notion",
+        ];
 
-        let recent: Vec<String> = self.recent_apps.iter().take(5).map(|a| a.to_lowercase()).collect();
+        let recent: Vec<String> = self
+            .recent_apps
+            .iter()
+            .take(5)
+            .map(|a| a.to_lowercase())
+            .collect();
 
-        let dev_count = recent.iter().filter(|a| dev_apps.iter().any(|d| a.contains(d))).count();
-        let comm_count = recent.iter().filter(|a| comm_apps.iter().any(|d| a.contains(d))).count();
-        let creative_count = recent.iter().filter(|a| creative_apps.iter().any(|d| a.contains(d))).count();
-        let prod_count = recent.iter().filter(|a| prod_apps.iter().any(|d| a.contains(d))).count();
+        let dev_count = recent
+            .iter()
+            .filter(|a| dev_apps.iter().any(|d| a.contains(d)))
+            .count();
+        let comm_count = recent
+            .iter()
+            .filter(|a| comm_apps.iter().any(|d| a.contains(d)))
+            .count();
+        let creative_count = recent
+            .iter()
+            .filter(|a| creative_apps.iter().any(|d| a.contains(d)))
+            .count();
+        let prod_count = recent
+            .iter()
+            .filter(|a| prod_apps.iter().any(|d| a.contains(d)))
+            .count();
 
-        let max = dev_count.max(comm_count).max(creative_count).max(prod_count);
+        let max = dev_count
+            .max(comm_count)
+            .max(creative_count)
+            .max(prod_count);
         if max == 0 {
             self.workspace = WorkspaceContext::General;
         } else if dev_count == max {

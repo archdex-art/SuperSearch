@@ -11,12 +11,13 @@
 //! - **Revocable**: Capabilities can be revoked at any time (atomic flag flip).
 //! - **Auditable**: Every grant, revoke, and check is journaled.
 
-pub mod token;
+pub mod gate;
 pub mod namespace;
 pub mod registry;
-pub mod gate;
+pub mod signature;
+pub mod token;
 
-pub use token::{CapabilityToken, CapabilityId, Permission};
+pub use gate::{CapabilityGate, GateDecision};
 pub use namespace::Namespace;
 pub use registry::CapabilityRegistry;
-pub use gate::{CapabilityGate, GateDecision};
+pub use token::{CapabilityId, CapabilityToken, Permission};

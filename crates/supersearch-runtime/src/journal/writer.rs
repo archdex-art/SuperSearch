@@ -81,8 +81,8 @@ impl Segment {
     /// Attempt to write an entry's serialized bytes into this segment.
     /// Returns `Err(WriterError::SegmentFull)` if there's insufficient space.
     fn write(&mut self, entry: &JournalEntry) -> Result<usize, WriterError> {
-        let serialized = bincode::serialize(entry)
-            .map_err(|e| WriterError::Serialization(e.to_string()))?;
+        let serialized =
+            bincode::serialize(entry).map_err(|e| WriterError::Serialization(e.to_string()))?;
 
         let entry_size = serialized.len();
         // 4-byte length prefix for framing.
@@ -93,7 +93,8 @@ impl Segment {
         }
 
         // Write length-prefixed frame.
-        self.buffer.extend_from_slice(&(entry_size as u32).to_le_bytes());
+        self.buffer
+            .extend_from_slice(&(entry_size as u32).to_le_bytes());
         self.buffer.extend_from_slice(&serialized);
         self.write_offset += total_size;
 
@@ -130,12 +131,17 @@ impl JournalSender {
     /// Send an entry to the journal. Non-blocking; returns error if the
     /// writer's channel is full (backpressure signal).
     pub fn send(&self, entry: JournalEntry) -> Result<(), WriterError> {
-        self.tx.try_send(entry).map_err(|_| WriterError::ChannelClosed)
+        self.tx
+            .try_send(entry)
+            .map_err(|_| WriterError::ChannelClosed)
     }
 
     /// Async send that waits for channel capacity.
     pub async fn send_async(&self, entry: JournalEntry) -> Result<(), WriterError> {
-        self.tx.send(entry).await.map_err(|_| WriterError::ChannelClosed)
+        self.tx
+            .send(entry)
+            .await
+            .map_err(|_| WriterError::ChannelClosed)
     }
 }
 
@@ -163,10 +169,7 @@ impl JournalWriter {
     ///
     /// `channel_capacity`: buffer size for the MPSC channel. 4096 entries
     /// provides ~100ms of buffering at 40K entries/sec throughput.
-    pub fn new(
-        journal_dir: impl AsRef<Path>,
-        channel_capacity: usize,
-    ) -> (Self, JournalSender) {
+    pub fn new(journal_dir: impl AsRef<Path>, channel_capacity: usize) -> (Self, JournalSender) {
         let journal_dir = journal_dir.as_ref().to_path_buf();
         let (tx, rx) = mpsc::channel(channel_capacity);
 
@@ -201,7 +204,10 @@ impl JournalWriter {
             let entry = match self.rx.recv().await {
                 Some(e) => e,
                 None => {
-                    info!(total = self.total_entries, "Channel closed — writer shutting down");
+                    info!(
+                        total = self.total_entries,
+                        "Channel closed — writer shutting down"
+                    );
                     self.flush().await?;
                     return Ok(());
                 }
@@ -243,7 +249,11 @@ impl JournalWriter {
             Ok(_bytes) => {
                 self.total_entries += 1;
                 if self.total_entries.is_multiple_of(10_000) {
-                    debug!(total = self.total_entries, bytes_used = self.active_segment.write_offset, "Journal progress");
+                    debug!(
+                        total = self.total_entries,
+                        bytes_used = self.active_segment.write_offset,
+                        "Journal progress"
+                    );
                 }
                 Ok(())
             }
@@ -278,9 +288,9 @@ impl JournalWriter {
 
         // Create new segment.
         self.segment_counter += 1;
-        let new_path = self.journal_dir.join(
-            format!("segment_{:06}.journal", self.segment_counter)
-        );
+        let new_path = self
+            .journal_dir
+            .join(format!("segment_{:06}.journal", self.segment_counter));
         self.active_segment = Segment::new(new_path, self.segment_capacity);
 
         Ok(())
@@ -318,10 +328,14 @@ impl JournalWriter {
     }
 
     /// Returns the total number of entries written.
-    pub fn total_entries(&self) -> u64 { self.total_entries }
+    pub fn total_entries(&self) -> u64 {
+        self.total_entries
+    }
 
     /// Returns paths to all sealed segments (for compaction).
-    pub fn sealed_segments(&self) -> &[PathBuf] { &self.sealed_segments }
+    pub fn sealed_segments(&self) -> &[PathBuf] {
+        &self.sealed_segments
+    }
 }
 
 #[cfg(test)]
@@ -353,6 +367,8 @@ mod tests {
         let reader = JournalReader::new(dir.path(), true);
         let entries = reader.read_all().await.unwrap();
         assert_eq!(entries.len(), 5);
-        assert!(entries.iter().all(|e| e.kind == EntryKind::OsAutomationResult));
+        assert!(entries
+            .iter()
+            .all(|e| e.kind == EntryKind::OsAutomationResult));
     }
 }
