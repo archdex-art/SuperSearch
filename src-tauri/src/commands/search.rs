@@ -220,7 +220,7 @@ fn command_prefix_result(q: &str) -> Option<SearchResult> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use supersearch_runtime::extension::ExtensionQueryHit;
+    use supersearch_runtime::extension::{ExtensionQueryHit, manifest::ExtensionKind};
 
     #[test]
     fn extension_hit_merges_as_ranked_routable_result() {
@@ -228,6 +228,7 @@ mod tests {
             extension_id: "spotify".into(),
             title: "Play Daft Punk".into(),
             subtitle: "Artist".into(),
+            kind: ExtensionKind::Script,
             action: Some(ExtensionAction::OpenUrl { url: "https://open.spotify.com/x".into() }),
         };
         let r = extension_hit_to_result("daft", hit);
@@ -243,6 +244,7 @@ mod tests {
             extension_id: "x".into(),
             title: "Unrelated".into(),
             subtitle: String::new(),
+            kind: ExtensionKind::Script,
             action: None,
         };
         assert!(extension_hit_to_result("zzz", other).score < r.score);

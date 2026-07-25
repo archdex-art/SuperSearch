@@ -19,14 +19,14 @@ use crate::extension::runtime::allocator::SandboxAllocator;
 #[derive(Debug, Clone)]
 pub struct DiscoveredExtension {
     pub manifest: ExtensionManifest,
-    /// Directory containing `manifest.json` and the entrypoint bundle.
+    /// Directory containing `manifest.toml` (or `manifest.json`) and the entrypoint bundle.
     pub dir: PathBuf,
 }
 
-/// Scans the immediate subdirectories of `root` for `manifest.json` files
-/// declaring `"kind": "js"`. Never panics on a single bad entry — a corrupted
-/// manifest, an unreadable directory, or a duplicate id is logged and skipped
-/// so one broken extension cannot take down discovery for every other one.
+/// Scans the immediate subdirectories of `root` for `manifest.toml` (or legacy
+/// `manifest.json`) files declaring `kind = "js"`. Never panics on a single bad
+/// entry — a corrupted manifest, an unreadable directory, or a duplicate id is
+/// logged and skipped so one broken extension cannot take down discovery for all.
 pub fn discover_js_extensions(root: &Path) -> Vec<DiscoveredExtension> {
     let mut found = Vec::new();
     let mut seen_ids = HashSet::new();
@@ -45,17 +45,34 @@ pub fn discover_js_extensions(root: &Path) -> Vec<DiscoveredExtension> {
             continue;
         }
 
-        let manifest_path = dir.join("manifest.json");
-        let raw = match std::fs::read_to_string(&manifest_path) {
-            Ok(raw) => raw,
-            Err(_) => continue, // No manifest.json here — not an extension directory.
+        // Try TOML first (canonical), fall back to JSON for older fixtures.
+        let (raw, manifest_path, use_toml) = {
+            let toml_path = dir.join("manifest.toml");
+            let json_path = dir.join("manifest.json");
+            if let Ok(raw) = std::fs::read_to_string(&toml_path) {
+                (raw, toml_path, true)
+            } else if let Ok(raw) = std::fs::read_to_string(&json_path) {
+                (raw, json_path, false)
+            } else {
+                continue; // Neither manifest file found — not an extension directory.
+            }
         };
 
-        let manifest = match ExtensionManifest::from_json(&raw) {
-            Ok(m) => m,
-            Err(e) => {
-                warn!(path = %manifest_path.display(), error = %e, "extension discovery: malformed manifest, skipping");
-                continue;
+        let manifest = if use_toml {
+            match ExtensionManifest::from_toml(&raw) {
+                Ok(m) => m,
+                Err(e) => {
+                    warn!(path = %manifest_path.display(), error = %e, "extension discovery: malformed manifest, skipping");
+                    continue;
+                }
+            }
+        } else {
+            match ExtensionManifest::from_json(&raw) {
+                Ok(m) => m,
+                Err(e) => {
+                    warn!(path = %manifest_path.display(), error = %e, "extension discovery: malformed manifest, skipping");
+                    continue;
+                }
             }
         };
 
@@ -191,7 +208,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let ext_dir = dir.path().join("broken-ext");
         std::fs::create_dir(&ext_dir).unwrap();
-        std::fs::write(ext_dir.join("manifest.json"), "{ not valid json").unwrap();
+        std::fs::write(ext_dir.join("manifest.toml"), "id = \"broken\"\nkind = ").unwrap();
 
         let found = discover_js_extensions(dir.path());
         assert!(found.is_empty(), "a malformed manifest must be skipped, not crash discovery");
@@ -204,8 +221,8 @@ mod tests {
             let ext_dir = dir.path().join(name);
             std::fs::create_dir(&ext_dir).unwrap();
             std::fs::write(
-                ext_dir.join("manifest.json"),
-                r#"{"id":"dup","name":"Dup","version":"1.0.0","kind":"js","entrypoint":"dist/bundle.js"}"#,
+                ext_dir.join("manifest.toml"),
+                "id = \"dup\"\nname = \"Dup\"\nversion = \"1.0.0\"\nkind = \"js\"\nentrypoint = \"dist/bundle.js\"\n",
             )
             .unwrap();
         }
@@ -226,7 +243,7 @@ mod tests {
             .unwrap_or_else(|| {
                 panic!(
                     "hello-world fixture not discovered under {}; \
-                     ensure examples/hello-world/manifest.json exists and dist/bundle.js is built",
+                     ensure examples/hello-world/manifest.toml exists and dist/bundle.js is built",
                     examples_root.display()
                 )
             });
