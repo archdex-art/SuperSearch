@@ -20,6 +20,12 @@ pub struct ExtensionScheduler {
     outgoing: HashMap<String, mpsc::Sender<IpcEnvelope>>,
 }
 
+impl Default for ExtensionScheduler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ExtensionScheduler {
     pub fn new() -> Self {
         Self {

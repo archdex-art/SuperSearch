@@ -29,6 +29,12 @@ pub struct ContextItem {
     pub timestamp: Instant,
 }
 
+impl Default for ContextWindow {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ContextWindow {
     pub fn new() -> Self {
         Self {
