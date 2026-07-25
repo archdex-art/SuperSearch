@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "framer-motion";
 import { CommandItem } from "./CommandItem";
 import { DetailPane } from "./DetailPane";
+import { ExtensionHydrator } from "./Hydrator";
 import {
   actionVerb,
   CATEGORY_RANK,
@@ -47,6 +48,9 @@ export default function App() {
   // no default handler, an extension throwing, …) — surfaced inline instead
   // of the palette just silently closing as if nothing happened.
   const [actionError, setActionError] = useState<string | null>(null);
+  // When non-null, the palette is replaced by the ExtensionHydrator for the
+  // given extension id. Escape (or a new summon) returns to the palette.
+  const [extensionView, setExtensionView] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const baseId = useId();
@@ -115,23 +119,27 @@ export default function App() {
           perform: async () => {
             setActionError(null);
             try {
-              if (r.id.startsWith("ext:") && r.action != null) {
-                // Extension result — dispatch through its capability token.
+              if (r.is_js) {
+                // JS extension: boot the V8 isolate and transition to Hydrator view.
+                const extId = r.id.slice("ext:".length).split("::")[0];
+                await invoke("launch_extension", { id: extId });
+                setExtensionView(extId);
+              } else if (r.id.startsWith("ext:") && r.action != null) {
+                // Script/Wasm extension result — dispatch through capability token.
                 const extId = r.id.slice("ext:".length).split("::")[0];
                 await invoke("execute_extension_action", { id: extId, action: r.action });
+                hide();
               } else {
                 const response = await invoke<ExecuteActionResponse>("execute_action", {
                   request: { action_id: r.id, with_meta: false },
                 });
                 if (!response.success) {
-                  // Surface the real OS-level failure (bad/missing path, no
-                  // default handler, a permission gate, …) instead of
-                  // silently closing as if nothing happened.
+                  // Surface the real OS-level failure instead of silently closing.
                   setActionError(response.detail.replace(/^✗\s*/, ""));
                   return;
                 }
+                hide();
               }
-              hide();
             } catch (e) {
               setActionError(String(e instanceof Error ? e.message : e));
             }
@@ -175,6 +183,7 @@ export default function App() {
       setCategoryFilter(null);
       setFilterOpen(false);
       setActionError(null);
+      setExtensionView(null);
       setSummonKey((k) => k + 1);
       requestAnimationFrame(() => inputRef.current?.focus());
     }).then((fn) => {
@@ -319,6 +328,12 @@ export default function App() {
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      // Escape from the extension Hydrator returns to the palette without closing.
+      if (e.key === "Escape" && extensionView !== null) {
+        e.preventDefault();
+        setExtensionView(null);
+        return;
+      }
       if (e.key === "Escape" && filterOpen) {
         e.preventDefault();
         setFilterOpen(false);
@@ -346,7 +361,7 @@ export default function App() {
           break;
       }
     },
-    [filteredRows, activeIndex, choose, hide, scrollInto, filterOpen],
+    [filteredRows, activeIndex, choose, hide, scrollInto, filterOpen, extensionView],
   );
 
   const activeRow = filteredRows[activeIndex];
@@ -431,6 +446,12 @@ export default function App() {
             </div>
 
             {/* Results — a narrow list plus a detail preview of the active row. */}
+            {/* Extension view: replaces the palette list with the Hydrator. */}
+            {extensionView !== null ? (
+              <div className="relative z-10 flex-1 overflow-hidden">
+                <ExtensionHydrator extensionId={extensionView} />
+              </div>
+            ) : (
             <LayoutGroup>
               <div className="relative z-10 flex-1 overflow-hidden">
                 {filteredRows.length === 0 ? (
@@ -490,6 +511,7 @@ export default function App() {
                 )}
               </div>
             </LayoutGroup>
+            )}
 
             <AnimatePresence>
               {actionError && (
@@ -539,9 +561,17 @@ export default function App() {
                   SuperSearch
                 </span>
               )}
-              <FooterHint k="↑↓" label="Navigate" />
-              <FooterHint k="↵" label={activeRow?.hint ?? "Open"} />
-              <FooterHint k="esc" label="Close" />
+              {extensionView !== null ? (
+                <>
+                  <FooterHint k="esc" label="Back" />
+                </>
+              ) : (
+                <>
+                  <FooterHint k="↑↓" label="Navigate" />
+                  <FooterHint k="↵" label={activeRow?.hint ?? "Open"} />
+                  <FooterHint k="esc" label="Close" />
+                </>
+              )}
               <button
                 type="button"
                 onClick={() => void invoke("open_settings_window")}

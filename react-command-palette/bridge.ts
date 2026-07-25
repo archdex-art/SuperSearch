@@ -23,6 +23,8 @@ export interface BackendResult {
    * the declared action to run via `execute_extension_action`. Absent otherwise.
    */
   action?: unknown | null;
+  /** True for JS extensions that must be launched via `launch_extension` + Hydrator. */
+  is_js?: boolean;
 }
 
 /** Result of `execute_action` (mirrors src-tauri ExecuteActionResponse). */

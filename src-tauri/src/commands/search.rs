@@ -31,6 +31,10 @@ pub struct SearchResult {
     pub score: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub action: Option<ExtensionAction>,
+    /// True when the result is a JS extension that must be launched via the V8
+    /// isolate (`launch_extension`) rather than `execute_extension_action`.
+    #[serde(default)]
+    pub is_js: bool,
 }
 
 /// Execute a unified search query across all indexes.
@@ -146,6 +150,7 @@ fn extension_hit_to_result(
     } else {
         0.8
     };
+    let is_js = hit.kind == supersearch_runtime::extension::ExtensionKind::Js;
     SearchResult {
         id: format!("ext:{}::{}", hit.extension_id, hit.title),
         title: hit.title,
@@ -154,6 +159,7 @@ fn extension_hit_to_result(
         icon: "🧩".into(),
         score,
         action: hit.action,
+        is_js,
     }
 }
 
