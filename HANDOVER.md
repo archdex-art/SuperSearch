@@ -85,3 +85,7 @@ When resuming work, the AI or developer should focus on:
 
 ### Step 2: Operational Validation
 *   Invite an external developer to install the CLI and build an extension using only the public docs to measure "Time to First Render".
+
+### Step 3: Beta Execution & Monitoring
+*   Track platform performance against the targets defined in [`docs/beta_exit_metrics.md`](docs/beta_exit_metrics.md).
+*   Achieve rolling 14-day compliance with the exit metrics before declaring General Availability (GA).
