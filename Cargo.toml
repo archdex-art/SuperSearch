@@ -13,3 +13,12 @@ codegen-units = 1
 opt-level = 3
 panic = "abort"
 strip = "symbols"
+
+[profile.dev]
+# Reduces the massive 12GB target/ folder by disabling heavy debug symbols
+# for dependencies like V8/deno_core during local development.
+debug = 0
+
+# Optimize dependency compilation slightly without slowing down our own code iteration
+[profile.dev.package."*"]
+opt-level = 1
