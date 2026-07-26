@@ -25,7 +25,7 @@ jobs:
         run: |
           # Custom script comparing requested capabilities to previously approved ones
           # Fails the PR if high-privilege capabilities are suddenly requested without review.
-          npx @supersearch/cli lint-capabilities
+          npx supersearch lint-capabilities
 
   build:
     name: Build & Lint
@@ -36,7 +36,7 @@ jobs:
       - name: Install dependencies & Build Workspaces
         run: npm ci && npm run build
       - name: Build Extension (esbuild)
-        run: npx @supersearch/cli build
+        run: npx supersearch build
       - name: Enforce Size Quota
         run: |
           SIZE=$(stat -c%s "dist/bundle.js")
@@ -59,17 +59,17 @@ jobs:
       - name: Install dependencies & Build Workspaces
         run: npm ci && npm run build
       - name: Build Extension (esbuild)
-        run: npx @supersearch/cli build
+        run: npx supersearch build
       - name: Sign Bundle
         env:
           PRIVATE_KEY: ${{ secrets.MARKETPLACE_PRIVATE_KEY }}
         run: |
           # Uses the private Ed25519 key to generate a detached signature (.sig)
-          npx @supersearch/cli sign --key "$PRIVATE_KEY" dist/bundle.js
+          npx supersearch sign --key "$PRIVATE_KEY" dist/bundle.js
       - name: Upload to Edge CDN (Cloudflare R2 / S3)
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           # Push the bundle, the signature, and update the global extensions.json
-          npx @supersearch/cli publish-to-cdn
+          npx supersearch publish-to-cdn
