@@ -15,10 +15,11 @@ panic = "abort"
 strip = "symbols"
 
 [profile.dev]
-# Reduces the massive 12GB target/ folder by disabling heavy debug symbols
-# for dependencies like V8/deno_core during local development.
-debug = 0
+# Keep line numbers for our own code's backtraces (1), but drop heavy variables (2)
+debug = 1
 
-# Optimize dependency compilation slightly without slowing down our own code iteration
 [profile.dev.package."*"]
+# Drop ALL debug symbols and lightly optimize dependencies (V8, Tauri)
+# This stops the target/ folder from ballooning to 12GB+ while maintaining local DX.
+debug = 0
 opt-level = 1
