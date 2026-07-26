@@ -9,7 +9,7 @@
 //! 3. **Runtime Failure:** An extension bundle throwing a JS error is caught safely.
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use supersearch_runtime::capability::gate::CapabilityGate;
