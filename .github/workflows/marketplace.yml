@@ -17,6 +17,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - name: Install dependencies
+        run: npm ci
       - name: NPM Audit (OSV)
         run: npm audit --audit-level=high
       - name: Capability Diff Check
