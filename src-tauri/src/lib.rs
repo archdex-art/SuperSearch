@@ -603,6 +603,7 @@ pub fn run() {
             commands::extensions::set_extension_trusted,
             commands::extensions::query_extensions,
             commands::extensions::execute_extension_action,
+            commands::extensions::launch_extension,
             commands::extensions::pick_extension_dir,
             commands::settings::get_settings,
             commands::settings::update_settings,

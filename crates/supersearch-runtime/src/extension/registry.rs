@@ -88,6 +88,10 @@ pub struct ExtensionQueryHit {
     pub title: String,
     pub subtitle: String,
     pub action: Option<ExtensionAction>,
+    /// Execution kind of the originating extension — the frontend uses this to
+    /// decide whether to route through `execute_extension_action` (Script/Wasm)
+    /// or through `launch_extension` + `ExtensionHydrator` (Js).
+    pub kind: super::manifest::ExtensionKind,
 }
 
 /// Errors from registry operations.
@@ -312,6 +316,7 @@ impl ExtensionRegistry {
         // whole fan-out is bounded by the overall deadline below.
         let (tx, rx) = std::sync::mpsc::channel::<(
             String,
+            ExtensionKind,
             Result<Vec<host::ExtensionResult>, host::HostError>,
         )>();
         let mut spawned = 0usize;
@@ -341,8 +346,19 @@ impl ExtensionRegistry {
                         ExtensionKind::Wasm => wasm::run_query(&dir.join(&entrypoint), &input)
                             .map_err(host::HostError::BadOutput),
                         ExtensionKind::Js => {
-                            // M1: Hook into V8 Runtime Allocator here
-                            Ok(vec![])
+                            // Js extensions surface a single launcher row per
+                            // extension; actual results are produced after the V8
+                            // isolate boots (via `launch_extension`). Return one
+                            // synthetic result with no action so the frontend routes
+                            // it through the Hydrator path.
+                            Ok(vec![host::ExtensionResult {
+                                title: entrypoint
+                                    .trim_end_matches(".js")
+                                    .trim_end_matches(".ts")
+                                    .to_string(),
+                                subtitle: "Extension".into(),
+                                action: None,
+                            }])
                         }
                     }))
                     .unwrap_or_else(|_| {
@@ -350,7 +366,7 @@ impl ExtensionRegistry {
                             "extension worker panicked".into(),
                         ))
                     });
-                let _ = tx.send((id, outcome));
+                let _ = tx.send((id, kind, outcome));
             });
             spawned += 1;
         }
@@ -362,17 +378,18 @@ impl ExtensionRegistry {
         let mut hits = Vec::new();
         for _ in 0..spawned {
             match rx.recv() {
-                Ok((id, Ok(results))) => {
+                Ok((id, kind, Ok(results))) => {
                     for r in results {
                         hits.push(ExtensionQueryHit {
                             extension_id: id.clone(),
                             title: r.title,
                             subtitle: r.subtitle,
                             action: r.action,
+                            kind,
                         });
                     }
                 }
-                Ok((id, Err(e))) => warn!(id, error = %e, "Extension query failed"),
+                Ok((id, _kind, Err(e))) => warn!(id, error = %e, "Extension query failed"),
                 Err(_) => break, // all workers reported and senders dropped
             }
         }
@@ -712,4 +729,44 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, ExtensionError::PermissionDenied(_)));
     }
+    /// A `kind = "js"` extension, once enabled (no trust required — it runs
+    /// through the V8 isolate, not as a raw script), must surface a hit in
+    /// `query` with `kind: Js`. This verifies the new channel tuple shape and
+    /// the synthetic result produced by the `ExtensionKind::Js` arm.
+    #[test]
+    fn js_extension_query_returns_kind_js() {
+        let (reg, _dir) = make_registry();
+        reg.load().unwrap();
+
+        // Build a minimal JS extension in a staging dir.
+        let staging = tempfile::tempdir().unwrap();
+        let src = staging.path().join("hello-js");
+        fs::create_dir_all(&src).unwrap();
+        fs::write(
+            src.join("manifest.toml"),
+            "id = \"hello-js\"\nname = \"Hello JS\"\nversion = \"1.0.0\"\nkind = \"js\"\nentrypoint = \"dist/bundle.js\"\nkeywords = [\"hello\"]\n",
+        )
+        .unwrap();
+        // The bundle doesn't need to execute for this test — the synthetic hit
+        // is produced by the registry before the isolate boots.
+        fs::create_dir_all(src.join("dist")).unwrap();
+        fs::write(src.join("dist/bundle.js"), "// placeholder").unwrap();
+
+        reg.install(&src).unwrap();
+        reg.set_enabled("hello-js", true).unwrap();
+
+        let hits = reg.query("hello");
+        assert_eq!(hits.len(), 1, "expected one hit from the JS extension");
+        assert_eq!(hits[0].extension_id, "hello-js");
+        assert_eq!(
+            hits[0].kind,
+            ExtensionKind::Js,
+            "hit must carry kind = Js so the frontend routes it to the Hydrator"
+        );
+        assert!(
+            hits[0].action.is_none(),
+            "JS extension hits carry no script action — they go through launch_extension"
+        );
+    }
+
 }

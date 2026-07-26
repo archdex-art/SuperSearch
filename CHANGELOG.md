@@ -4,6 +4,15 @@ All notable changes to SuperSearch are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); versions
 correspond to [GitHub Releases](https://github.com/archdex-art/SuperSearch/releases)
 and their published installers.
+## [Unreleased]
+
+### Added
+- **V8 Extension Runtime (v1.0 Architecture):** Transitioned from Wasmtime/WASM plugins to isolated V8 execution via `deno_core`. Extends the platform to securely execute React/TypeScript plugins within strict memory and CPU watchdogs.
+- **Zero-Copy MessagePack IPC:** Created the `supersearch_ipc` fast API bridge binding Rust and V8, allowing extensions to push UI tree definitions natively to the Host.
+- **Custom React Reconciler:** Scaffolds the `@supersearch/reconciler` allowing extension developers to use standard React hooks mapped to Rust UI components.
+- **AI Integration (MCP):** Extensions automatically compile to Model Context Protocol (MCP) schemas, dynamically extending the `AgentController`'s capabilities without hardcoding.
+- **Ed25519 Extension Security:** Added strict cryptographic bundle verification ensuring tampered or unsigned scripts cannot execute.
+- **Developer CLI:** Built `@supersearch/cli` delivering React Fast Refresh (HMR) during local development over a dedicated WebSocket.
 
 ## [0.1.20] — 2026-07-22
 

@@ -36,12 +36,19 @@ The implementation is structured around strict, executable "Gates".
 *   The Rust host securely receives, decodes, and validates the `IpcEnvelope::UiSync` payload.
 *   Malformed IPC payloads are safely caught and rejected without panicking the Rust host.
 
-### 🟡 Gate C: Application Integration / Discovery (PARTIAL - RUST COMPLETE)
-*   **Done:** `discovery.rs` accurately scans `~/.supersearch/extensions/` for valid manifests.
-*   **Done:** Gracefully skips malformed or duplicate manifests without crashing.
-*   **Done:** `launch_extension()` effectively creates an isolate and pulls the initial rendered UI tree via IPC.
-*   **Pending:** Wiring the `discovery.rs` backend into the Tauri React Frontend (`App.tsx`).
+### ✅ Gate C: Application Integration / Discovery (PASSED)
+*   `discovery.rs` accurately scans `~/.supersearch/extensions/` for valid manifests.
+*   Gracefully skips malformed or duplicate manifests without crashing.
+*   `launch_extension()` effectively creates an isolate and pulls the initial rendered UI tree via IPC.
+*   Wired `discovery.rs` backend into the Tauri React Frontend (`App.tsx` and `bridge.ts`).
+*   `Hydrator.tsx` accepts the `UiSync` payload dynamically from the launched extension and natively renders the UI.
+*   Vertical slice complete: Install → Discover → Search → Launch → Render → Return.
 
+### ✅ Gate D: Developer Experience Validation (PASSED)
+*   Automated E2E tests for the Golden Path (Hello World).
+*   Automated regression tests for Broken Extensions (malformed manifest safety).
+*   Automated regression tests for Runtime Failure (JS bundle throwing errors safely caught).
+*   Developer documentation (`extensions.md`) updated to reflect the new React/V8 architecture, making the onboarding process clear and aligned with the current implementation.
 ---
 
 ## 3. Directory Map (Where things live)
@@ -71,15 +78,14 @@ Before Gate D or a Private Beta release, the following technical debt must be ad
 
 When resuming work, the AI or developer should focus on:
 
-### Step 1: Finish Gate C (Frontend Wiring)
-*   Expose the `discovery_js_extensions` and `launch_extension` capabilities as Tauri Commands.
-*   Update `react-command-palette/App.tsx` to query these commands on boot and inject them into the searchable index.
-*   Hook the `Hydrator.tsx` component to accept the `UiSync` payload dynamically from the launched extension.
-
-### Step 2: Gate D (End-to-End Lifecycle)
-*   Implement the unhappy-path testing for full lifecycle routing.
-*   Implement the **Persist**, **Update**, **Disable**, and **Uninstall** handlers.
+### Step 1: Beta Prep & Polish
+*   Implement the **Persist**, **Update**, **Disable**, and **Uninstall** handlers in the UI.
 *   Verify that unloading an extension successfully cleans up the SQLite database and gracefully compacts the V8 heap.
+*   Fix the Timer Stopgap Polyfill (`isolate.rs`) and externalize the React reconciler to optimize bundle sizes.
 
-### Step 3: Operational Validation (Beta Prep)
+### Step 2: Operational Validation
 *   Invite an external developer to install the CLI and build an extension using only the public docs to measure "Time to First Render".
+
+### Step 3: Beta Execution & Monitoring
+*   Track platform performance against the targets defined in [`docs/beta_exit_metrics.md`](docs/beta_exit_metrics.md).
+*   Achieve rolling 14-day compliance with the exit metrics before declaring General Availability (GA).

@@ -7,12 +7,15 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use tauri::{command, AppHandle};
+use tauri::{command, AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
 
 use supersearch_runtime::extension::{
     ExtensionAction, ExtensionInfo, ExtensionQueryHit, ExtensionRegistry,
 };
+use supersearch_runtime::extension::manifest::ExtensionKind;
+use supersearch_runtime::extension::runtime::V8Isolate;
+use supersearch_runtime::extension::ipc::envelope::EnvelopeType;
 
 /// List all installed extensions (for the manager UI).
 #[command]
@@ -103,4 +106,81 @@ pub async fn pick_extension_dir(app: AppHandle) -> Result<Option<String>, String
     })
     .await
     .map_err(|e| format!("folder picker task panicked: {e}"))
+}
+
+/// Launch a JS extension by id: boots a V8 isolate, executes its bundle, and
+/// begins streaming `UiSync` payloads to the frontend as
+/// `extension_ui_sync_<id>` Tauri events.
+///
+/// Returns immediately — the isolate's event loop runs on a detached background
+/// task so the IPC call never blocks the WebView thread.
+#[command]
+pub async fn launch_extension(
+    id: String,
+    app: AppHandle,
+    registry: tauri::State<'_, Arc<ExtensionRegistry>>,
+) -> Result<(), String> {
+    use tauri::Emitter as _;
+
+    // Find the extension record: we need its dir and manifest.
+    let (manifest, bundle_path) = {
+        let info_list = registry.list();
+        let info = info_list
+            .iter()
+            .find(|i| i.id == id)
+            .ok_or_else(|| format!("extension '{id}' not found"))?;
+        if info.kind != ExtensionKind::Js {
+            return Err(format!("extension '{id}' is not a JS extension"));
+        }
+        // Re-derive the on-disk path from the registry dir + extension id.
+        // The ExtensionRegistry doesn't expose the dir directly, so we
+        // reconstruct it from the known layout: <data_dir>/extensions/<id>/.
+        let ext_dir = app
+            .path()
+            .app_data_dir()
+            .map_err(|e| e.to_string())?
+            .join("extensions")
+            .join(&id);
+        let toml_text = std::fs::read_to_string(ext_dir.join("manifest.toml"))
+            .map_err(|e| format!("cannot read manifest: {e}"))?;
+        let manifest = supersearch_runtime::extension::manifest::ExtensionManifest::from_toml(
+            &toml_text,
+        )
+        .map_err(|e| format!("invalid manifest: {e}"))?;
+        let bundle_path = ext_dir.join(&manifest.entrypoint);
+        (manifest, bundle_path)
+    };
+
+    let bundle_src = std::fs::read_to_string(&bundle_path)
+        .map_err(|e| format!("cannot read bundle '{}': {e}", bundle_path.display()))?;
+
+    let event_name = format!("extension_ui_sync_{}", id);
+
+    // Spawn the isolate on a dedicated thread — `JsRuntime` is `!Send` so it
+    // cannot cross await points and must live entirely on one OS thread.
+    let app_handle = app.clone();
+    std::thread::spawn(move || {
+        let mut isolate = V8Isolate::new(manifest);
+        if let Err(e) = isolate.evaluate_script("extension:bundle.js", &bundle_src) {
+            let _ = app_handle.emit(
+                &event_name,
+                serde_json::json!({ "error": e.to_string() }),
+            );
+            return;
+        }
+
+        // Drain UiSync messages from the guest and forward them as Tauri events.
+        // This loop runs until the isolate's sender is dropped (extension exits).
+        while let Some(envelope) = isolate.rx.blocking_recv() {
+            if envelope.2 == EnvelopeType::UiSync {
+                // Payload is the serialized UINode tree; forward as JSON to the
+                // frontend so Hydrator.tsx can deserialize and render it.
+                if let Ok(json) = serde_json::to_value(&envelope.5) {
+                    let _ = app_handle.emit(&event_name, json);
+                }
+            }
+        }
+    });
+
+    Ok(())
 }

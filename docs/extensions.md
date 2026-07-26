@@ -1,33 +1,47 @@
 # Extensions
 
 An extension is a directory with a `manifest.toml` and an entrypoint,
-installed under
-`~/Library/Application Support/com.supersearch.app/extensions/`. Two
-execution models share one registry:
+installed under `~/.local/share/com.supersearch.app/extensions/` (or equivalent per OS).
+
+Three execution models share one registry:
 
 | Model | Status | Sandbox |
 |---|---|---|
+| **JavaScript (React UI)** | Available now | V8 Isolate (`deno_core`) executing React Native-style Reconciler |
 | **Script** | Available now | Native subprocess, argv only (no shell), hard 10s timeout |
-| **WASM** | Manifest support in place; sandbox scaffolding exists (`plugin/`), not yet wired to the live query path | `wasmtime`, fuel + memory limits |
+| **WASM** | Sandbox exists, not live | `wasmtime`, fuel + memory limits |
 
-## Manifest (`manifest.toml`)
+## JavaScript Manifest (`manifest.toml`)
 
 ```toml
-id = "ddg"
-name = "DuckDuckGo Search"
+id = "hello-world"
+name = "Hello World"
 version = "1.0.0"
-kind = "script"
-entrypoint = "run.sh"
-keywords = ["ddg", "search"]   # empty = consulted for every query
+kind = "js"
+entrypoint = "dist/bundle.js"
+keywords = ["hello"]
 
 [[permissions]]
 permission = "NetworkConnect"
-justification = "Open search results in your default browser"
+justification = "Fetch remote user data"
 ```
 
 `manifest::manifest.rs` parses and validates this file; `id` must be unique
 across installed extensions and is the namespace root for the extension's
 capability token (`plugin.<id>`).
+
+## JavaScript (React UI) Contract
+
+JS extensions run inside a highly secure **V8 Isolate**. They use a custom React Reconciler, so you write standard React components with the `@supersearch/api` SDK.
+Instead of rendering HTML to a DOM, the Reconciler translates your React tree into native UI instructions (`UiSync` envelopes) sent to the host via IPC over MessagePack.
+
+To build a JS extension:
+1. Scaffold your project and install `@supersearch/api`.
+2. Write your entrypoint (`src/index.tsx`), exporting your root component.
+3. Bundle the app (using `esbuild`, `vite`, etc.) to the `entrypoint` specified in the manifest.
+
+A runnable reference implementation lives in
+[`examples/hello-world/`](../examples/hello-world/).
 
 ## Script contract
 
@@ -80,7 +94,7 @@ Implemented in `src-tauri/src/commands/extensions.rs`, backed by
 
 1. Create a directory under the extensions path with `manifest.toml` +
    entrypoint.
-2. Start from `examples/extensions/ddg/` (script) or
+2. Start from `examples/hello-world/` (JavaScript), `examples/extensions/ddg/` (script), or
    `examples/extensions/wasm-hello/` (WASM).
 3. Request only the permissions your entrypoint actually uses — the gate
    denies anything not listed, so an under-scoped manifest fails loudly

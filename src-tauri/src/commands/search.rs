@@ -31,6 +31,10 @@ pub struct SearchResult {
     pub score: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub action: Option<ExtensionAction>,
+    /// True when the result is a JS extension that must be launched via the V8
+    /// isolate (`launch_extension`) rather than `execute_extension_action`.
+    #[serde(default)]
+    pub is_js: bool,
 }
 
 /// Execute a unified search query across all indexes.
@@ -146,6 +150,7 @@ fn extension_hit_to_result(
     } else {
         0.8
     };
+    let is_js = hit.kind == supersearch_runtime::extension::ExtensionKind::Js;
     SearchResult {
         id: format!("ext:{}::{}", hit.extension_id, hit.title),
         title: hit.title,
@@ -154,6 +159,7 @@ fn extension_hit_to_result(
         icon: "🧩".into(),
         score,
         action: hit.action,
+        is_js,
     }
 }
 
@@ -214,7 +220,7 @@ fn command_prefix_result(q: &str) -> Option<SearchResult> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use supersearch_runtime::extension::ExtensionQueryHit;
+    use supersearch_runtime::extension::{ExtensionQueryHit, manifest::ExtensionKind};
 
     #[test]
     fn extension_hit_merges_as_ranked_routable_result() {
@@ -222,6 +228,7 @@ mod tests {
             extension_id: "spotify".into(),
             title: "Play Daft Punk".into(),
             subtitle: "Artist".into(),
+            kind: ExtensionKind::Script,
             action: Some(ExtensionAction::OpenUrl { url: "https://open.spotify.com/x".into() }),
         };
         let r = extension_hit_to_result("daft", hit);
@@ -237,6 +244,7 @@ mod tests {
             extension_id: "x".into(),
             title: "Unrelated".into(),
             subtitle: String::new(),
+            kind: ExtensionKind::Script,
             action: None,
         };
         assert!(extension_hit_to_result("zzz", other).score < r.score);

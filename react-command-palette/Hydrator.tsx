@@ -51,7 +51,7 @@ function renderNode(node: UINode): React.ReactNode {
 
     // Combine safe props from the guest with the bound native closures
     const boundEvents = bindEvents(node.events);
-    const props = { ...node.props, ...boundEvents, key: node.id };
+    const props = { ...node.props, ...boundEvents, key: node.id } as Record<string, unknown> & { key: string };
 
     const children = node.children.map(renderNode);
 

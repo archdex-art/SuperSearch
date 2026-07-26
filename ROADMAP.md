@@ -22,45 +22,25 @@ reordering something.
 - Unsigned installers for macOS (universal), Linux (`.deb`), and Windows
   (NSIS + `.msi`) published via the tag-triggered release workflow.
 
-## Now
+## Now (V1.0 Architecture Implementation)
 
-- **Code signing & notarization** — macOS Gatekeeper / Windows SmartScreen
-  currently warn on every fresh install. Activates purely from repo secrets
-  once an Apple Developer account + Windows signing cert are available; see
-  [RELEASING.md](RELEASING.md).
-- **Scheduler on the live path** — `scheduler/` (multi-queue cooperative
-  scheduling + supervision) currently boots but doesn't drive first-party
-  agent actions yet. Wiring it in unlocks true parallel multi-step execution
-  with priority and preemption instead of sequential dispatch.
-- **Linux / Windows parity pass** — the PAL backends exist and build, but
-  get less real-world usage than macOS; tracking rough edges as they surface
-  (see `requirements/linux.md`, `requirements/windows.md`).
+*Note: The platform has recently undergone a massive architectural shift (V1.0) moving away from Wasmtime/WASM towards V8 Isolates to better support the React/TypeScript ecosystem, and evolving the offline-only Agent to an MCP-native LLM orchestrator.*
+
+- **V8 Extension Runtime** — Replaced `wasmtime` with `deno_core`. Extensions are now written in React/TypeScript, sandboxed with strict 50MB memory constraints, and communicate via a Zero-Copy MessagePack IPC bridge. (WASM exploration is archived).
+- **Custom React Reconciler** — `@supersearch/reconciler` allows developers to write declarative UI components that natively hydrate inside the Tauri window.
+- **AI Integration (MCP)** — Shifted from purely offline, fixed intent classification to an LLM-orchestrated `AgentController`. Extension manifests dynamically compile into Model Context Protocol (MCP) schemas, treating the AI as a first-class consumer.
+- **Code signing & notarization** — Ed25519 signature enforcement is now integrated into the `SandboxAllocator`. macOS Gatekeeper / Windows SmartScreen warnings are pending final developer certificates.
+- **Scheduler on the live path** — `scheduler/` now utilizes `tokio_stream::StreamMap` to fairly multiplex V8 IPC messages without priority inversion or starvation.
 
 ## Next
 
-- **WASM extensions on the live path** — `plugin/` (wasmtime sandbox, fuel +
-  memory limits) and the WASM manifest contract are scaffolded
-  (`examples/extensions/wasm-hello/`), but `query`/`alloc` execution isn't
-  wired into the query pipeline yet. Script extensions stay the supported
-  path until this lands.
-- **Extension manager UI** — the IPC surface (`list_extensions`,
-  `install_extension`, `set_extension_enabled`, …) exists; a first-class UI
-  for browsing/installing/toggling extensions (rather than hand-editing the
-  extensions directory) does not yet.
-- **Reactive context graph on the live path** — `reactive/` (topological
-  dependency graph) boots but isn't yet the backing store for
-  `agent/context.rs`'s short-term memory; today's context tracking is
-  simpler than the graph it will eventually run on.
-- **Auto-update, enabled by default** — the `updater` Cargo feature and
-  `check_for_updates` IPC command exist behind a feature flag requiring
-  `plugins.updater.pubkey`; turning this on by default needs a signing key
-  and a release-channel decision.
+- **Application Integration (Frontend Wiring)** — The V8 isolates and Rust discovery services are functional, but `react-command-palette/App.tsx` must be wired to invoke them seamlessly from the global search bar.
+- **Extension manager UI** — A first-class UI for browsing, installing, and toggling extensions (rather than hand-editing `~/.supersearch/extensions/`).
+- **Auto-update, enabled by default** — the `updater` Cargo feature and `check_for_updates` IPC command exist behind a feature flag; turning this on by default needs a release-channel decision.
 
 ## Later / exploratory
 
-- Third-party plugin marketplace, once the WASM sandbox is load-bearing and
-  has a track record — each plugin gets its own narrowly-scoped capability
-  token through the existing `CapabilityGate`, no new trust model.
+- Third-party plugin marketplace via Edge CDN distribution — each plugin gets its own narrowly-scoped capability token through the existing `CapabilityGate`, enforced by Ed25519 signatures.
 - Cross-device sync of extensions/settings (explicitly opt-in; the security
   model's "local-first" invariant for query data doesn't change).
 - Team/shared-config profiles for organizations standardizing on
@@ -68,11 +48,7 @@ reordering something.
 
 ## Explicitly not planned
 
-- Cloud-side query processing or telemetry beyond the existing opt-in
-  `telemetry` command — intent classification stays local and offline by
-  design (see [docs/security.md](docs/security.md)).
-- Arbitrary script synthesis from user text — the fixed `AgentIntent`
-  taxonomy is a security invariant, not a v1 limitation to relax later.
+- Purely unconstrained Cloud execution without local verification — while we now support LLM inference via MCP, all OS capability boundaries and user confirmations (idempotency checks) remain strictly enforced locally by the Rust Host.
 
 ---
 
