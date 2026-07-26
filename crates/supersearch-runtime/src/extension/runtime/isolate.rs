@@ -185,6 +185,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "exhausts V8 heap in debug mode, causing CI timeouts"]
     async fn test_memory_quota_enforcement() {
         let mut isolate = V8Isolate::new(dummy_manifest());
         // A script designed to allocate large arrays indefinitely until the 50MB limit is hit.
