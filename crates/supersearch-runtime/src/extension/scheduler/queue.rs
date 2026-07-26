@@ -107,7 +107,7 @@ mod tests {
         scheduler.register_isolate("ext-1".into(), rx1, tx_out1);
 
         let (tx2, rx2) = mpsc::channel(10);
-        let (tx_out2, rx_out2) = mpsc::channel(10);
+        let (tx_out2, _rx_out2) = mpsc::channel(10);
         scheduler.register_isolate("ext-2".into(), rx2, tx_out2);
 
         // Simulate concurrent requests
